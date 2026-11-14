@@ -321,3 +321,7 @@ details.carte[open] > summary { margin-bottom: 8px; }
 #fcSansCouleur { flex: 1 1 0; padding: 0 10px; }
 #fcSansCouleur.actif { outline: 2px solid var(--accent); }
 .pastille { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.15); }
+
+/* Virement : deux cases de pointage empilées (départ / arrivée) */
+.op .coches { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.op .coches .coche { width: 21px; height: 21px; }

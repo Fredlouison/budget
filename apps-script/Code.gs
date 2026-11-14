@@ -9,7 +9,7 @@
  * Enseignes, Paiements, Favoris, Parametres.
  */
 
-const VERSION_API = '2.1.0';
+const VERSION_API = '2.2.0';
 const CLE_TOKEN = 'BUDGET_TOKEN';
 
 const TABLES = {
@@ -17,7 +17,7 @@ const TABLES = {
     cle: ['id'],
     colonnes: ['id', 'date', 'type', 'designation', 'enseigne', 'categorie', 'sous_categorie',
       'compte', 'compte_vers', 'paiement', 'montant', 'pointe', 'commentaire', 'serie_id', 'source',
-      'groupe', 'groupe_libelle'],
+      'groupe', 'groupe_libelle', 'pointe_vers'],
     dates: ['date'], booleens: ['pointe'], nombres: ['montant']
   },
   Series: {
@@ -304,7 +304,9 @@ function archiverAnnee(annee) {
     const limite = annee + '-12-31';
     const aArchiver = operations.filter(o => String(o.date) <= limite);
     if (!aArchiver.length) throw new Error("Aucune opération jusqu'à fin " + annee + '.');
-    const nonPointees = aArchiver.filter(o => o.pointe !== true);
+    // Un virement doit être pointé des deux côtés (pointe_vers vide = même état que pointe).
+    const nonPointees = aArchiver.filter(o => o.pointe !== true ||
+      (o.type === 'VIREMENT' && String(o.pointe_vers).toLowerCase() === 'false'));
     if (nonPointees.length) {
       throw new Error(nonPointees.length + ' opération(s) non pointée(s) jusqu\'à fin ' + annee +
         ' : pointe-les ou supprime-les avant d\'archiver.');

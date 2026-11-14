@@ -4,8 +4,8 @@
  */
 'use strict';
 
-const VERSION_APP = '1.14.0';
-const VERSION_SCRIPT_ATTENDUE = '2.1.0';
+const VERSION_APP = '1.15.0';
+const VERSION_SCRIPT_ATTENDUE = '2.2.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
   Operations: ['id'], Series: ['id'], Comptes: ['nom'], Arretes: ['compte', 'annee', 'mois'],
@@ -70,6 +70,7 @@ function param(cle) { const p = data.Parametres.find(x => x.cle === cle); return
 
 /** Couleur d'un compte (paramètre « couleur:<nom> »), et sa version très claire pour le fond des lignes. */
 function couleurCompte(nom) { return param('couleur:' + nom) || ''; }
+function styleCase(nom) { const c = couleurCompte(nom); return c ? ' style="accent-color:' + esc(c) + '"' : ''; }
 function fondCompte(nom) {
   const c = couleurCompte(nom);
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c);
@@ -190,6 +191,18 @@ function majEtatSync(erreur) {
 
 /* ================= Calculs de soldes ================= */
 
+/** Pointage côté arrivée d'un virement (vide = même état que le côté départ, pour les anciens virements). */
+function estPointeVers(o) {
+  const v = o.pointe_vers;
+  if (v === undefined || v === null || v === '') return !!o.pointe;
+  return v === true || String(v).toLowerCase() === 'true';
+}
+/** Une opération est-elle pointée pour ce compte ? */
+function pointePour(o, compte) {
+  if (o.type === 'VIREMENT' && o.compte_vers === compte && o.compte !== compte) return estPointeVers(o);
+  return !!o.pointe;
+}
+
 function mouvement(o, compte) {
   const m = Number(o.montant) || 0;
   if (o.type === 'VIREMENT') return (o.compte === compte ? -Math.abs(m) : 0) + (o.compte_vers === compte ? Math.abs(m) : 0);
@@ -213,7 +226,7 @@ function soldesCompte(c, jour) {
     const mv = mouvement(o, c.nom);
     if (!mv) continue;
     utilise = true;
-    if (o.pointe) {
+    if (pointePour(o, c.nom)) {
       if (o.date <= dateArrete) pointeArrete += mv;
       if (o.date <= jour) pointeJour += mv;
       pointeTotal += mv;
@@ -420,10 +433,16 @@ function rendreJournal() {
     const sous = o.type === 'VIREMENT'
       ? 'Virement · ' + esc(o.compte) + ' → ' + esc(o.compte_vers)
       : esc([o.categorie, o.sous_categorie].filter(Boolean).join(' › ')) + (extra ? '' : ' · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : ''));
-    const fond = fondCompte(o.compte);
-    return '<div class="op' + (!o.pointe && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
-      (fond ? ' style="background:' + fond + '"' : '') + '>' +
-      '<input type="checkbox" class="coche" ' + (o.pointe ? 'checked' : '') + ' aria-label="Pointée">' +
+    const vir = o.type === 'VIREMENT';
+    let fond = fondCompte(o.compte);
+    if (vir && (fond || fondCompte(o.compte_vers))) fond = 'linear-gradient(90deg,' + (fond || '#fff') + ',' + (fondCompte(o.compte_vers) || '#fff') + ')';
+    const cases = vir
+      ? '<span class="coches"><input type="checkbox" class="coche" data-cote="depart" ' + (o.pointe ? 'checked' : '') + styleCase(o.compte) + ' title="Pointé sur ' + esc(o.compte) + '" aria-label="Pointé sur ' + esc(o.compte) + '">' +
+        '<input type="checkbox" class="coche" data-cote="arrivee" ' + (estPointeVers(o) ? 'checked' : '') + styleCase(o.compte_vers) + ' title="Pointé sur ' + esc(o.compte_vers) + '" aria-label="Pointé sur ' + esc(o.compte_vers) + '"></span>'
+      : '<input type="checkbox" class="coche" ' + (o.pointe ? 'checked' : '') + styleCase(o.compte) + ' aria-label="Pointée">';
+    const prevue = vir ? (!o.pointe || !estPointeVers(o)) : !o.pointe;
+    return '<div class="op' + (prevue && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
+      (fond ? ' style="background:' + fond + '"' : '') + '>' + cases +
       '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' 💬' : '') + '</div>' +
       '<div class="s">' + sous + '</div></div>' +
       '<div class="m ' + classe + '">' + euros(montantAffiche) + '</div></div>';
@@ -446,7 +465,7 @@ function rendreJournal() {
     const fondG = fondCompte(o.compte);
     html += '<div class="op groupe' + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '"' +
       (fondG ? ' style="background:' + fondG + '"' : '') + '>' +
-      '<input type="checkbox" class="coche" ' + (toutPointe ? 'checked' : '') + ' aria-label="Pointée">' +
+      '<input type="checkbox" class="coche" ' + (toutPointe ? 'checked' : '') + styleCase(o.compte) + ' aria-label="Pointée">' +
       '<div class="lib"><div class="t"><span class="picto" title="Dépense ventilée">' + (ouvert ? '▾' : '▸') + ' ' + el.enfants.length + '</span>' + esc(titre) + (o.commentaire ? ' 💬' : '') + '</div>' +
       '<div class="s">Ventilée · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '') + '</div></div>' +
       '<div class="m ' + (total < 0 ? 'neg' : 'pos') + '">' + euros(total) + '</div></div>';
@@ -464,7 +483,14 @@ function rendreJournal() {
   });
   $$('#listeOps .op:not(.groupe)').forEach(el => {
     const id = el.dataset.id;
-    $('.coche', el).onchange = e => modifier([{ table: 'Operations', op: 'upsert', data: { id, pointe: e.target.checked } }]);
+    $$('.coche', el).forEach(cb => cb.onchange = e => {
+      const o = data.Operations.find(x => x.id === id);
+      let maj;
+      if (cb.dataset.cote === 'arrivee') maj = { id, pointe_vers: e.target.checked };
+      else if (cb.dataset.cote === 'depart') maj = { id, pointe: e.target.checked, pointe_vers: estPointeVers(o) };   // fige le côté arrivée
+      else maj = { id, pointe: e.target.checked };
+      modifier([{ table: 'Operations', op: 'upsert', data: maj }]);
+    });
     $('.lib', el).onclick = $('.m', el).onclick = () => ouvrirFormulaire({ op: data.Operations.find(o => o.id === id) });
   });
 }
@@ -592,6 +618,7 @@ function ouvrirFormulaire(opts) {
   $('#zoneRaccourcis').hidden = !!edition;
   $('#champFrequence').hidden = false;
   $('#champPointe').hidden = !edition;
+  $('#champPointeVers').hidden = true;
   $('#btnSupprimer').hidden = !edition;
   $('#champSuivantes').hidden = !(edition && edition.serie_id);
   $('#blocVentilation').hidden = true;
@@ -604,6 +631,11 @@ function ouvrirFormulaire(opts) {
     $('#designation').value = edition.designation;
     $('#commentaire').value = edition.commentaire || '';
     $('#pointe').checked = !!edition.pointe;
+    const virEd = edition.type === 'VIREMENT';
+    $('#champPointeVers').hidden = !virEd;
+    $('#libPointe').textContent = virEd ? 'Pointée sur ' + edition.compte : 'Pointée';
+    $('#libPointeVers').textContent = virEd ? 'Pointée sur ' + edition.compte_vers : '';
+    $('#pointeVers').checked = virEd && estPointeVers(edition);
     const serieActuelle = edition.serie_id && data.Series.find(x => x.id === edition.serie_id);
     $('#frequence').value = serieActuelle && (!serieActuelle.fin || serieActuelle.fin >= edition.date) ? serieActuelle.frequence : 'UNE_FOIS';
   } else {
@@ -862,7 +894,8 @@ function enregistrer(ev) {
     }
 
     // --- Modification simple ---
-    const muts = [{ table: 'Operations', op: 'upsert', data: Object.assign({ id: edition.id, pointe: $('#pointe').checked }, fiche) }];
+    const muts = [{ table: 'Operations', op: 'upsert', data: Object.assign({ id: edition.id, pointe: $('#pointe').checked },
+      type === 'VIREMENT' ? { pointe_vers: $('#pointeVers').checked } : {}, fiche) }];
     if (edition.serie_id && $('#suivantes').checked) {
       const jour = Number(date.slice(8, 10));
       data.Operations.filter(o => o.serie_id === edition.serie_id && o.date > edition.date && !o.pointe).forEach(o => {
@@ -882,7 +915,8 @@ function enregistrer(ev) {
   const frequence = $('#frequence').value;
   if (frequence === 'UNE_FOIS') {
     const id = nouvelId();
-    modifier([{ table: 'Operations', op: 'upsert', data: Object.assign({ id, pointe: false, serie_id: '', source: 'appli' }, fiche) }]);
+    modifier([{ table: 'Operations', op: 'upsert', data: Object.assign({ id, pointe: false, serie_id: '', source: 'appli' },
+      type === 'VIREMENT' ? { pointe_vers: false } : {}, fiche) }]);
     return terminerSaisie(date, 'Enregistré', [id]);
   }
   const serie = Object.assign({ id: 'S-' + nouvelId(), frequence, jour: Number(date.slice(8, 10)), debut: date, fin: '', actif: true }, fiche);
