@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14202b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Budget">
+  <title>Budget</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="barre">
+    <h1 id="titre">Budget</h1>
+    <button id="etatSync" class="etat-sync" type="button" title="Synchroniser">●</button>
+  </header>
+
+  <main>
+    <!-- ACCUEIL -->
+    <section id="vue-accueil" class="vue">
+      <div id="total" class="carte total"></div>
+      <div id="comptes"></div>
+      <details id="autresComptes" class="autres"><summary>Autres comptes</summary><div></div></details>
+    </section>
+
+    <!-- JOURNAL -->
+    <section id="vue-journal" class="vue" hidden>
+      <div class="nav-mois">
+        <button type="button" id="moisPrec" aria-label="Mois précédent">‹</button>
+        <strong id="moisLibelle"></strong>
+        <button type="button" id="moisSuiv" aria-label="Mois suivant">›</button>
+      </div>
+      <div class="filtres">
+        <select id="filtreCompte"></select>
+        <input id="recherche" type="search" placeholder="Rechercher…" autocomplete="off">
+      </div>
+      <div id="resumeMois" class="resume"></div>
+      <details id="parCategorie" class="carte"><summary>Dépenses par catégorie</summary><div></div></details>
+      <div id="listeOps"></div>
+    </section>
+
+    <!-- SAISIE -->
+    <section id="vue-saisie" class="vue" hidden>
+      <form id="formulaire" autocomplete="off" novalidate>
+        <div id="zoneRaccourcis">
+          <div class="ligne-raccourcis">
+            <label class="interrupteur"><input type="checkbox" id="modeVacances"> Vacances</label>
+            <input id="lieuVacances" class="lieu" placeholder="Lieu" hidden>
+          </div>
+          <div id="favoris" class="puces"></div>
+        </div>
+
+        <div class="segment" id="segType">
+          <button type="button" data-type="DEPENSE">Dépense</button>
+          <button type="button" data-type="RECETTE">Recette</button>
+          <button type="button" data-type="VIREMENT">Virement</button>
+        </div>
+
+        <div class="grille2">
+          <label class="champ" id="champMontant">Montant
+            <span class="avec-bouton">
+              <input id="montant" inputmode="decimal" placeholder="0,00 ou 12,5+3">
+              <button type="button" id="plus" class="mini" aria-label="Ajouter +">+</button>
+            </span>
+          </label>
+          <label class="champ">Date
+            <input id="date" type="date">
+            <span class="raccourcis-date">
+              <button type="button" data-jours="0">Aujourd'hui</button>
+              <button type="button" data-jours="-1">Hier</button>
+            </span>
+          </label>
+        </div>
+
+        <label class="champ" id="champDesignation">Désignation
+          <input id="designation" list="listeDesignations" placeholder="Ex : Courses Aldi">
+          <datalist id="listeDesignations"></datalist>
+        </label>
+
+        <div class="grille2">
+          <label class="champ" id="champCompte">Compte <button type="button" class="etoile" data-defaut="compte" title="Compte par défaut">☆</button>
+            <select id="compte"></select>
+          </label>
+          <label class="champ" id="champVers" hidden>Vers
+            <select id="vers"></select>
+          </label>
+          <label class="champ" id="champPaiement">Paiement <button type="button" class="etoile" data-defaut="paiement" title="Paiement par défaut">☆</button>
+            <select id="paiement"></select>
+          </label>
+        </div>
+
+        <div id="blocClassement">
+          <label class="champ">Enseigne <button type="button" class="ajout" data-ajout="enseigne">+</button>
+            <select id="enseigne"></select>
+          </label>
+          <div class="grille2" id="blocCategorie">
+            <label class="champ">Catégorie <button type="button" class="ajout" data-ajout="categorie">+</button>
+              <select id="categorie"></select>
+            </label>
+            <label class="champ">Sous-catégorie <button type="button" class="ajout" data-ajout="sous_categorie">+</button>
+              <select id="sous_categorie"></select>
+            </label>
+          </div>
+        </div>
+
+        <div id="blocVentilation" hidden>
+          <div id="lignesVentilation"></div>
+          <div class="pied-ventilation">
+            <button type="button" id="ajoutLigne" class="secondaire">+ Ligne</button>
+            <strong id="totalVentilation"></strong>
+          </div>
+        </div>
+
+        <div class="grille2">
+          <label class="champ" id="champFrequence">Fréquence
+            <select id="frequence">
+              <option value="UNE_FOIS">Une fois</option>
+              <option value="MENSUEL">Mensuel</option>
+              <option value="BIMESTRIEL">Bimestriel</option>
+              <option value="TRIMESTRIEL">Trimestriel</option>
+              <option value="QUADRIMESTRIEL">Quadrimestriel</option>
+              <option value="SEMESTRIEL">Semestriel</option>
+              <option value="ANNUEL">Annuel</option>
+            </select>
+          </label>
+          <label class="interrupteur champ-bas" id="champVentiler"><input type="checkbox" id="ventiler"> Ventiler sur plusieurs lignes</label>
+        </div>
+
+        <label class="champ">Commentaire
+          <textarea id="commentaire" rows="2"></textarea>
+        </label>
+
+        <label class="interrupteur" id="champPointe"><input type="checkbox" id="pointe"> Pointée</label>
+        <label class="interrupteur" id="champSuivantes" hidden><input type="checkbox" id="suivantes"> Appliquer aussi aux échéances suivantes non pointées</label>
+
+        <p id="erreurForm" class="erreur"></p>
+
+        <div class="actions">
+          <button type="submit" class="principal" id="btnEnregistrer">Enregistrer</button>
+          <button type="button" class="secondaire" id="btnAnnuler">Annuler</button>
+        </div>
+        <div class="actions">
+          <button type="button" class="lien" id="btnFavori">★ Enregistrer comme favori</button>
+          <button type="button" class="lien danger" id="btnSupprimer" hidden>Supprimer</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- RÉGLAGES -->
+    <section id="vue-reglages" class="vue" hidden>
+      <div class="carte">
+        <h2>Connexion</h2>
+        <label class="champ">Adresse du script (URL de l'application web)
+          <input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec">
+        </label>
+        <label class="champ">Token
+          <input id="cfgToken" type="password" autocomplete="off">
+        </label>
+        <div class="actions"><button type="button" class="principal" id="btnConnexion">Enregistrer et synchroniser</button></div>
+        <p id="infoSync" class="discret"></p>
+      </div>
+
+      <div class="carte">
+        <h2>Année suivante</h2>
+        <p class="discret">Les échéances récurrentes de l'année suivante sont créées automatiquement en décembre. Tu peux aussi le faire maintenant.</p>
+        <button type="button" class="secondaire" id="btnAnneeSuivante"></button>
+      </div>
+
+      <details class="carte"><summary>Favoris</summary><div id="listeFavoris"></div></details>
+      <details class="carte"><summary>Opérations récurrentes</summary><div id="listeSeries"></div></details>
+
+      <div class="carte">
+        <h2>Maintenance</h2>
+        <button type="button" class="secondaire" id="btnRecharger">Recharger toutes les données</button>
+        <p class="discret" id="version"></p>
+      </div>
+    </section>
+  </main>
+
+  <button id="fab" class="fab" type="button" aria-label="Nouvelle opération">+</button>
+
+  <nav class="onglets">
+    <button type="button" data-vue="accueil" class="actif"><span>◉</span>Soldes</button>
+    <button type="button" data-vue="journal"><span>☰</span>Journal</button>
+    <button type="button" data-vue="reglages"><span>⚙</span>Réglages</button>
+  </nav>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

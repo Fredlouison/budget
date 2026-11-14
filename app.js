@@ -1,0 +1,778 @@
+/* Budget — appli web hors connexion (v1)
+ * Données : copie locale (localStorage) + file d'attente des modifications,
+ * synchronisée avec le script Apps Script du classeur « Budget – Base ».
+ */
+'use strict';
+
+const VERSION_APP = '1.0.0';
+const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
+const CLES = {
+  Operations: ['id'], Series: ['id'], Comptes: ['nom'], Arretes: ['compte', 'annee', 'mois'],
+  Categories: ['categorie', 'sous_categorie'], Enseignes: ['enseigne'], Paiements: ['paiement'],
+  Favoris: ['id'], Parametres: ['cle']
+};
+const INTERVALLES = { MENSUEL: 1, BIMESTRIEL: 2, TRIMESTRIEL: 3, QUADRIMESTRIEL: 4, SEMESTRIEL: 6, ANNUEL: 12 };
+const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+function lire(cle, defaut) {
+  try { const v = localStorage.getItem(cle); return v ? JSON.parse(v) : defaut; } catch (e) { return defaut; }
+}
+function ecrire(cle, v) {
+  try { localStorage.setItem(cle, JSON.stringify(v)); } catch (e) { toast('Stockage local plein : ' + e.message, true); }
+}
+
+let config = lire(LS.config, { url: '', token: '' });
+let data = lire(LS.data, null);
+let outbox = lire(LS.outbox, []);
+let local = lire(LS.local, { derniereDate: '', derniereDateTs: 0, vacances: false, derniereSync: '' });
+let vueCourante = 'accueil';
+let moisJournal = null;
+let syncEnCours = false;
+let derniereErreur = '';
+let edition = null;   // opération en cours de modification
+let typeCourant = 'DEPENSE';
+let tousFavoris = false;
+
+function videData() {
+  const d = {}; Object.keys(CLES).forEach(t => { d[t] = []; }); return d;
+}
+if (!data) data = videData();
+
+
+/* ================= Outils ================= */
+
+const pad = n => String(n).padStart(2, '0');
+function aujourdhui() { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function ymd(y, m, j) { return y + '-' + pad(m) + '-' + pad(j); }
+function joursDansMois(y, m) { return new Date(y, m, 0).getDate(); }
+function decalerJours(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number); const x = new Date(y, m - 1, d + n);
+  return ymd(x.getFullYear(), x.getMonth() + 1, x.getDate());
+}
+function nouvelId() {
+  const a = crypto.getRandomValues(new Uint8Array(6));
+  return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+}
+const fmt = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
+function euros(v) { return fmt.format(Number(v) || 0); }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function trierFr(liste) { return liste.slice().sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' })); }
+function param(cle) { const p = data.Parametres.find(x => x.cle === cle); return p ? p.valeur : ''; }
+
+/** Montant saisi : accepte « 12,50 », « =12,5+3,20 », « 10*3 ». */
+function calculer(texte) {
+  const expr = String(texte || '').trim().replace(/^=/, '').replace(/\s/g, '').replace(/,/g, '.');
+  if (!expr) return null;
+  if (!/^[0-9+\-*/().]+$/.test(expr)) throw new Error('Montant invalide');
+  const r = Function('"use strict";return (' + expr + ')')();
+  if (typeof r !== 'number' || !isFinite(r)) throw new Error('Montant invalide');
+  return Math.round((r + Number.EPSILON) * 100) / 100;
+}
+
+let minuterieToast = null;
+function toast(msg, erreur) {
+  const t = $('#toast'); t.textContent = msg; t.className = 'toast' + (erreur ? ' erreur' : ''); t.hidden = false;
+  clearTimeout(minuterieToast); minuterieToast = setTimeout(() => { t.hidden = true; }, erreur ? 5000 : 2200);
+}
+
+
+/* ================= Données locales et synchronisation ================= */
+
+function cleDe(table, o) { return CLES[table].map(k => String(o[k] == null ? '' : o[k]).trim().toLowerCase()).join('|'); }
+
+function appliquerLocal(m) {
+  const liste = data[m.table] || (data[m.table] = []);
+  const k = cleDe(m.table, m.data);
+  const i = liste.findIndex(x => cleDe(m.table, x) === k);
+  if (m.op === 'delete') { if (i !== -1) liste.splice(i, 1); return; }
+  if (i !== -1) liste[i] = Object.assign({}, liste[i], m.data); else liste.push(Object.assign({}, m.data));
+}
+
+function modifier(mutations) {
+  mutations.forEach(appliquerLocal);
+  outbox.push(...mutations);
+  ecrire(LS.data, data); ecrire(LS.outbox, outbox);
+  rendre();
+  synchroniser();
+}
+
+async function api(action, charge) {
+  if (!config.url || !config.token) throw new Error('Connexion non configurée (onglet Réglages).');
+  const rep = await fetch(config.url, {
+    method: 'POST', redirect: 'follow',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(Object.assign({ token: config.token, action: action }, charge || {}))
+  });
+  if (!rep.ok) throw new Error('Serveur : HTTP ' + rep.status);
+  const json = await rep.json();
+  if (!json.ok) throw new Error(json.error || 'Erreur serveur');
+  return json.data;
+}
+
+async function synchroniser() {
+  if (syncEnCours || !config.url) { majEtatSync(); return; }
+  if (!navigator.onLine) { majEtatSync(); return; }
+  syncEnCours = true; majEtatSync();
+  try {
+    while (outbox.length) {
+      const lot = outbox.slice(0, 300);
+      await api('push', { mutations: lot });
+      outbox.splice(0, lot.length);
+      ecrire(LS.outbox, outbox);
+    }
+    const frais = await api('bootstrap');
+    data = frais;
+    outbox.forEach(appliquerLocal);       // saisies faites pendant la synchro
+    ecrire(LS.data, data);
+    local.derniereSync = new Date().toISOString(); ecrire(LS.local, local);
+    derniereErreur = '';
+    majEtatSync();
+    rendre();
+  } catch (e) {
+    derniereErreur = e instanceof TypeError ? 'Pas de réseau' : e.message;
+    majEtatSync(derniereErreur);
+    if (vueCourante === 'reglages') rendreReglages(e.message);
+  } finally {
+    syncEnCours = false; majEtatSync(derniereErreur);
+    if (outbox.length && navigator.onLine) setTimeout(synchroniser, 30000);
+  }
+}
+
+function majEtatSync(erreur) {
+  const b = $('#etatSync');
+  b.classList.remove('ok', 'attente', 'erreur', 'encours');
+  if (syncEnCours) { b.classList.add('encours'); b.title = 'Synchronisation…'; }
+  if (!config.url) { b.textContent = '● non connecté'; b.classList.add('erreur'); return; }
+  if (outbox.length) { b.textContent = '● ' + outbox.length + ' en attente'; b.classList.add('attente'); b.title = erreur || 'À envoyer'; return; }
+  if (erreur) { b.textContent = '● erreur'; b.classList.add('erreur'); b.title = erreur; return; }
+  if (!navigator.onLine) { b.textContent = '● hors ligne'; b.classList.add('attente'); return; }
+  b.textContent = '●'; b.classList.add('ok'); b.title = 'À jour';
+}
+
+
+/* ================= Calculs de soldes ================= */
+
+function mouvement(o, compte) {
+  const m = Number(o.montant) || 0;
+  if (o.type === 'VIREMENT') return (o.compte === compte ? -Math.abs(m) : 0) + (o.compte_vers === compte ? Math.abs(m) : 0);
+  return o.compte === compte ? m : 0;
+}
+
+/** Reproduit les colonnes de l'ancien classeur : Aujourd'hui, Fin de mois, Engagé M+1, Différence, Pointé. */
+function soldesCompte(c, jour) {
+  const y = Number(jour.slice(0, 4)), m = Number(jour.slice(5, 7));
+  const arr = data.Arretes.find(a => a.compte === c.nom && Number(a.annee) === y && Number(a.mois) === m);
+  const dateArrete = ymd(y, m, Math.min(arr ? Number(arr.jour) : 31, joursDansMois(y, m)));
+  const finMois = ymd(y, m, joursDansMois(y, m));
+  const ym1 = m === 12 ? [y + 1, 1] : [y, m + 1];
+  const debutSuiv = ymd(ym1[0], ym1[1], 1), finSuiv = ymd(ym1[0], ym1[1], joursDansMois(ym1[0], ym1[1]));
+  const depuis = String(c.date_solde || '');
+  const base = Number(c.solde_initial) || 0;
+  let pointeArrete = 0, nonPointeJour = 0, nonPointeFinMois = 0, pointeJour = 0, engage = 0, finAnnee = 0;
+  let utilise = false;
+  for (const o of data.Operations) {
+    if (o.date <= depuis) continue;
+    const mv = mouvement(o, c.nom);
+    if (!mv) continue;
+    utilise = true;
+    if (o.pointe) {
+      if (o.date <= dateArrete) pointeArrete += mv;
+      if (o.date <= jour) pointeJour += mv;
+    } else {
+      if (o.date <= jour) nonPointeJour += mv;
+      if (o.date <= finMois) nonPointeFinMois += mv;
+    }
+    if (o.date >= debutSuiv && o.date <= finSuiv && mv < 0) engage += mv;
+    if (o.date <= y + '-12-31') finAnnee += mv;
+  }
+  const r = v => Math.round(v * 100) / 100;
+  const fin = base + pointeArrete + nonPointeFinMois;
+  return {
+    aujourdhui: r(base + pointeArrete + nonPointeJour), finMois: r(fin), engage: r(engage),
+    difference: r(fin + engage), pointe: r(base + pointeJour), finAnnee: r(base + finAnnee),
+    utilise: utilise || Math.abs(base) > 0.004
+  };
+}
+
+
+/* ================= Rendu ================= */
+
+function rendre() {
+  if (vueCourante === 'accueil') rendreAccueil();
+  if (vueCourante === 'journal') rendreJournal();
+  if (vueCourante === 'reglages') rendreReglages();
+  majEtatSync();
+}
+
+function afficherVue(vue) {
+  vueCourante = vue;
+  $$('.vue').forEach(s => { s.hidden = s.id !== 'vue-' + vue; });
+  $$('.onglets button').forEach(b => b.classList.toggle('actif', b.dataset.vue === vue));
+  document.body.classList.toggle('saisie', vue === 'saisie');
+  $('#titre').textContent = { accueil: 'Soldes', journal: 'Journal', saisie: edition ? 'Modifier' : 'Nouvelle opération', reglages: 'Réglages' }[vue];
+  window.scrollTo(0, 0);
+  rendre();
+}
+
+function rendreAccueil() {
+  const jour = aujourdhui();
+  if (!data.Comptes.length) {
+    $('#total').innerHTML = '<span class="discret">Aucune donnée. Renseigne la connexion dans l\'onglet Réglages.</span>';
+    $('#comptes').innerHTML = ''; $('#autresComptes').hidden = true; return;
+  }
+  const comptes = data.Comptes.filter(c => c.actif !== false).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+  const calcules = comptes.map(c => ({ c, s: soldesCompte(c, jour) }));
+  const total = calcules.reduce((t, x) => t + x.s.aujourdhui, 0);
+  $('#total').innerHTML = '<div><div class="discret">Total aujourd\'hui</div><div class="montant-grand ' + (total < 0 ? 'neg' : '') + '">' +
+    euros(total) + '</div></div><div class="discret" style="text-align:right">' + new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) + '</div>';
+
+  const nomMoisSuiv = MOIS[new Date().getMonth() === 11 ? 0 : new Date().getMonth() + 1];
+  const carte = ({ c, s }) =>
+    '<div class="carte compte-carte" data-compte="' + esc(c.nom) + '">' +
+      '<div class="entete"><span class="nom">' + esc(c.nom) + '</span>' +
+      '<span class="montant-grand ' + (s.aujourdhui < 0 ? 'neg' : '') + '">' + euros(s.aujourdhui) + '</span></div>' +
+      '<div class="details-solde">' +
+        '<div>Fin de mois<b class="' + (s.finMois < 0 ? 'neg' : '') + '">' + euros(s.finMois) + '</b></div>' +
+        '<div>Engagé ' + nomMoisSuiv + '<b>' + euros(s.engage) + '</b></div>' +
+        '<div>Différence<b class="' + (s.difference < 0 ? 'neg' : '') + '">' + euros(s.difference) + '</b></div>' +
+        '<div>Pointé<b>' + euros(s.pointe) + '</b></div>' +
+      '</div></div>';
+
+  // Comptes principaux : les plus utilisés sur les 3 derniers mois, sinon ceux qui ont un solde.
+  const depuis = decalerJours(jour, -92);
+  const usage = {};
+  data.Operations.forEach(o => { if (o.date >= depuis) { usage[o.compte] = (usage[o.compte] || 0) + 1; if (o.compte_vers) usage[o.compte_vers] = (usage[o.compte_vers] || 0) + 1; } });
+  const principaux = calcules.filter(x => (usage[x.c.nom] || 0) >= 10);
+  const autres = calcules.filter(x => principaux.indexOf(x) === -1 && (x.s.utilise || Math.abs(x.s.aujourdhui) > 0.004));
+  $('#comptes').innerHTML = principaux.map(carte).join('');
+  $('#autresComptes').hidden = !autres.length;
+  $('#autresComptes > div').innerHTML = autres.map(carte).join('');
+  $$('.compte-carte').forEach(el => el.onclick = () => {
+    $('#filtreCompte').value = el.dataset.compte; moisJournal = null; afficherVue('journal');
+  });
+}
+
+function libelleMois(y, m) { return MOIS[m - 1] + ' ' + y; }
+
+function rendreJournal() {
+  if (!moisJournal) { const j = aujourdhui(); moisJournal = [Number(j.slice(0, 4)), Number(j.slice(5, 7))]; }
+  const [y, m] = moisJournal;
+  $('#moisLibelle').textContent = libelleMois(y, m);
+
+  const sel = $('#filtreCompte'), choix = sel.value;
+  sel.innerHTML = '<option value="">Tous les comptes</option>' +
+    data.Comptes.map(c => '<option>' + esc(c.nom) + '</option>').join('');
+  sel.value = choix;
+  const compte = sel.value;
+  const q = $('#recherche').value.trim().toLowerCase();
+  const prefixe = ymd(y, m, 1).slice(0, 7);
+
+  let ops = data.Operations.filter(o =>
+    (q ? true : o.date.slice(0, 7) === prefixe) &&
+    (!compte || o.compte === compte || o.compte_vers === compte) &&
+    (!q || [o.designation, o.enseigne, o.categorie, o.sous_categorie, o.commentaire, o.compte, String(o.montant)].join(' ').toLowerCase().includes(q)));
+  ops.sort((a, b) => b.date.localeCompare(a.date) || a.designation.localeCompare(b.designation, 'fr'));
+  if (q) ops = ops.slice(0, 300);
+
+  let dep = 0, rec = 0;
+  const cats = {};
+  ops.forEach(o => {
+    if (o.type === 'VIREMENT') return;
+    const v = Number(o.montant) || 0;
+    if (v < 0) { dep += v; cats[o.categorie || '—'] = (cats[o.categorie || '—'] || 0) - v; } else rec += v;
+  });
+  $('#resumeMois').innerHTML = '<span>Dépenses <b class="neg">' + euros(dep) + '</b></span><span>Recettes <b class="pos">' +
+    euros(rec) + '</b></span><span>Solde <b>' + euros(dep + rec) + '</b></span>';
+  const maxCat = Math.max(1, ...Object.values(cats));
+  $('#parCategorie > div').innerHTML = Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([c, v]) =>
+    '<div class="barre-cat"><span>' + esc(c) + '</span><span class="jauge"><i style="width:' + (v / maxCat * 100).toFixed(1) + '%"></i></span><span class="v">' + euros(v) + '</span></div>'
+  ).join('') || '<p class="discret">Aucune dépense.</p>';
+
+  const jour = aujourdhui();
+  let html = '', jourCourant = '';
+  ops.forEach(o => {
+    if (o.date !== jourCourant) {
+      jourCourant = o.date;
+      const [a, mm, d] = o.date.split('-').map(Number);
+      html += '<div class="jour">' + new Date(a, mm - 1, d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: q ? 'numeric' : undefined }) + '</div>';
+    }
+    const v = Number(o.montant) || 0;
+    let montantAffiche = v, classe = v < 0 ? 'neg' : 'pos';
+    if (o.type === 'VIREMENT') {
+      montantAffiche = compte ? (o.compte === compte ? -Math.abs(v) : Math.abs(v)) : Math.abs(v);
+      classe = compte ? (montantAffiche < 0 ? 'neg' : 'pos') : '';
+    }
+    const sous = o.type === 'VIREMENT'
+      ? 'Virement · ' + esc(o.compte) + ' → ' + esc(o.compte_vers)
+      : esc([o.categorie, o.sous_categorie].filter(Boolean).join(' › ')) + ' · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '');
+    html += '<div class="op' + (!o.pointe && o.date > jour ? ' prevue' : '') + '" data-id="' + esc(o.id) + '">' +
+      '<input type="checkbox" class="coche" ' + (o.pointe ? 'checked' : '') + ' aria-label="Pointée">' +
+      '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' 💬' : '') + '</div>' +
+      '<div class="s">' + sous + '</div></div>' +
+      '<div class="m ' + classe + '">' + euros(montantAffiche) + '</div></div>';
+  });
+  $('#listeOps').innerHTML = html || '<p class="discret">Aucune opération.</p>';
+  $$('#listeOps .op').forEach(el => {
+    const id = el.dataset.id;
+    $('.coche', el).onchange = e => modifier([{ table: 'Operations', op: 'upsert', data: { id, pointe: e.target.checked } }]);
+    $('.lib', el).onclick = $('.m', el).onclick = () => ouvrirFormulaire({ op: data.Operations.find(o => o.id === id) });
+  });
+}
+
+
+/* ================= Formulaire de saisie ================= */
+
+function remplirSelect(sel, valeurs, vide, valeur) {
+  sel.innerHTML = '<option value="">' + esc(vide) + '</option>' + valeurs.map(v => '<option>' + esc(v) + '</option>').join('');
+  if (valeur && valeurs.indexOf(valeur) === -1) sel.insertAdjacentHTML('beforeend', '<option>' + esc(valeur) + '</option>');
+  sel.value = valeur || '';
+}
+function listeCategories() { return [...new Set(data.Categories.map(c => c.categorie))]; }
+function listeSousCategories(cat) { return data.Categories.filter(c => c.categorie === cat).map(c => c.sous_categorie); }
+function listeComptes() { return data.Comptes.filter(c => c.actif !== false).sort((a, b) => (a.ordre || 0) - (b.ordre || 0)).map(c => c.nom); }
+
+function chargerSousCategories(valeur) {
+  remplirSelect($('#sous_categorie'), listeSousCategories($('#categorie').value), $('#categorie').value ? '— choisir —' : '— catégorie d\'abord —', valeur);
+}
+
+function definirType(type) {
+  typeCourant = type;
+  $$('#segType button').forEach(b => b.classList.toggle('actif', b.dataset.type === type));
+  const vir = type === 'VIREMENT';
+  $('#champVers').hidden = !vir;
+  $('#champPaiement').hidden = vir;
+  $('#blocClassement').hidden = vir;
+  $('#champVentiler').hidden = vir || !!edition;
+  if (vir) { $('#ventiler').checked = false; basculerVentilation(); }
+  $('#champDesignation').hidden = false;
+}
+
+function majEtoiles() {
+  ['compte', 'paiement'].forEach(k => {
+    const def = param(k + '_defaut'), sel = $('#' + k), btn = $('.etoile[data-defaut="' + k + '"]');
+    const actif = !!sel.value && sel.value === def;
+    btn.textContent = actif ? '★' : '☆'; btn.classList.toggle('actif', actif);
+    sel.classList.toggle('defaut', actif);
+  });
+}
+
+function dateParDefaut() {
+  // Garde la dernière date saisie pendant 30 min (pratique pour une série de tickets), sinon aujourd'hui.
+  if (local.derniereDate && Date.now() - local.derniereDateTs < 30 * 60 * 1000) return local.derniereDate;
+  return aujourdhui();
+}
+
+function ouvrirFormulaire(opts) {
+  opts = opts || {};
+  edition = opts.op || null;
+  const f = $('#formulaire'); f.reset();
+  $('#erreurForm').textContent = '';
+  $$('.invalide', f).forEach(x => x.classList.remove('invalide'));
+
+  remplirSelect($('#compte'), listeComptes(), '— choisir —', edition ? edition.compte : param('compte_defaut'));
+  remplirSelect($('#vers'), listeComptes(), '— choisir —', edition ? edition.compte_vers : '');
+  remplirSelect($('#paiement'), trierFr(data.Paiements.map(p => p.paiement)), '— choisir —', edition ? edition.paiement : param('paiement_defaut'));
+  remplirSelect($('#enseigne'), trierFr(data.Enseignes.map(e => e.enseigne)), '—', edition ? edition.enseigne : '');
+  remplirSelect($('#categorie'), listeCategories(), '— choisir —', edition ? edition.categorie : '');
+  chargerSousCategories(edition ? edition.sous_categorie : '');
+
+  const noms = {};
+  data.Operations.slice().sort((a, b) => b.date.localeCompare(a.date)).forEach(o => { if (o.designation && !noms[o.designation]) noms[o.designation] = 1; });
+  $('#listeDesignations').innerHTML = Object.keys(noms).slice(0, 400).map(n => '<option value="' + esc(n) + '">').join('');
+
+  $('#zoneRaccourcis').hidden = !!edition;
+  $('#champFrequence').hidden = !!edition;
+  $('#champPointe').hidden = !edition;
+  $('#btnSupprimer').hidden = !edition;
+  $('#champSuivantes').hidden = !(edition && edition.serie_id);
+  $('#blocVentilation').hidden = true;
+  $('#lignesVentilation').innerHTML = '';
+
+  if (edition) {
+    definirType(edition.type);
+    $('#montant').value = String(Math.abs(Number(edition.montant))).replace('.', ',');
+    $('#date').value = edition.date;
+    $('#designation').value = edition.designation;
+    $('#commentaire').value = edition.commentaire || '';
+    $('#pointe').checked = !!edition.pointe;
+  } else {
+    definirType('DEPENSE');
+    $('#date').value = dateParDefaut();
+    $('#modeVacances').checked = !!local.vacances;
+    $('#lieuVacances').value = param('lieu_vacances');
+    rendreRaccourcis();
+  }
+  majEtoiles();
+  afficherVue('saisie');
+  if (!edition) setTimeout(() => $('#montant').focus(), 50);
+}
+
+function rendreRaccourcis() {
+  const vac = $('#modeVacances').checked;
+  $('#lieuVacances').hidden = !vac;
+  let html;
+  if (vac) {
+    html = listeSousCategories('Vacances').map(sc => '<button type="button" data-vac="' + esc(sc) + '">' + esc(sc) + '</button>').join('');
+  } else {
+    const tries = data.Favoris.slice().sort((a, b) => (b.utilisations || 0) - (a.utilisations || 0) || String(a.nom).localeCompare(String(b.nom), 'fr'));
+    const visibles = tousFavoris ? tries : tries.slice(0, 8);
+    html = visibles.map(f => '<button type="button" data-fav="' + esc(f.id) + '">' + esc(f.nom || f.designation) + '</button>').join('') +
+      (tries.length > 8 ? '<button type="button" id="plusFavoris">' + (tousFavoris ? 'Moins' : '+' + (tries.length - 8) + ' autres') + '</button>' : '');
+  }
+  $('#favoris').innerHTML = html || '<span class="vide">' + (vac ? 'Aucune sous-catégorie « Vacances ».' : 'Aucun favori : remplis une saisie puis « ★ Enregistrer comme favori ».') + '</span>';
+  if ($('#plusFavoris')) $('#plusFavoris').onclick = () => { tousFavoris = !tousFavoris; rendreRaccourcis(); };
+  $$('#favoris [data-fav]').forEach(b => b.onclick = () => appliquerFavori(data.Favoris.find(f => f.id === b.dataset.fav)));
+  $$('#favoris [data-vac]').forEach(b => b.onclick = () => appliquerVacances(b.dataset.vac));
+}
+
+function appliquerFavori(f) {
+  if (!f) return;
+  definirType(f.type === 'RECETTE' ? 'RECETTE' : 'DEPENSE');
+  $('#designation').value = f.designation || '';
+  remplirSelect($('#enseigne'), trierFr(data.Enseignes.map(e => e.enseigne)), '—', f.enseigne);
+  $('#categorie').value = f.categorie || ''; chargerSousCategories(f.sous_categorie);
+  if (f.compte) $('#compte').value = f.compte;
+  if (f.paiement) $('#paiement').value = f.paiement;
+  majEtoiles();
+  modifier([{ table: 'Favoris', op: 'upsert', data: { id: f.id, utilisations: (Number(f.utilisations) || 0) + 1 } }]);
+  $('#montant').focus();
+}
+
+function appliquerVacances(sc) {
+  const lieu = $('#lieuVacances').value.trim().toUpperCase();
+  definirType('DEPENSE');
+  $('#designation').value = (lieu ? lieu + ' ' : '') + sc;
+  $('#categorie').value = 'Vacances'; chargerSousCategories(sc);
+  $('#montant').focus();
+}
+
+/** Saisie d'une désignation déjà connue : on reprend le classement de la dernière opération du même nom. */
+function completerDepuisHistorique() {
+  if (edition) return;
+  const nom = $('#designation').value.trim().toLowerCase();
+  if (!nom) return;
+  const precedente = data.Operations.filter(o => o.designation.toLowerCase() === nom && o.type !== 'VIREMENT')
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  if (!precedente) return;
+  if (!$('#enseigne').value) remplirSelect($('#enseigne'), trierFr(data.Enseignes.map(e => e.enseigne)), '—', precedente.enseigne);
+  if (!$('#categorie').value) { $('#categorie').value = precedente.categorie; chargerSousCategories(precedente.sous_categorie); }
+  if (precedente.type !== typeCourant) definirType(precedente.type);
+  if (precedente.compte && !$('#compte').value) $('#compte').value = precedente.compte;
+  if (precedente.paiement && !$('#paiement').value) $('#paiement').value = precedente.paiement;
+  majEtoiles();
+}
+
+function basculerVentilation() {
+  const on = $('#ventiler').checked;
+  $('#blocVentilation').hidden = !on;
+  $('#blocCategorie').hidden = on;
+  $('#champMontant').hidden = on;
+  $('#champDesignation').hidden = on;
+  $('#champFrequence').hidden = on || !!edition;
+  if (on && !$('#lignesVentilation').children.length) { ajouterLigneVentilation(); ajouterLigneVentilation(); }
+  majTotalVentilation();
+}
+
+function ajouterLigneVentilation() {
+  const div = document.createElement('div');
+  div.className = 'ligne-ventilation';
+  div.innerHTML = '<input class="v-designation" placeholder="Désignation">' +
+    '<input class="v-montant" inputmode="decimal" placeholder="Montant">' +
+    '<select class="v-categorie"></select><select class="v-sous"></select>' +
+    '<button type="button" class="suppr" aria-label="Supprimer la ligne">×</button>';
+  $('#lignesVentilation').appendChild(div);
+  remplirSelect($('.v-categorie', div), listeCategories(), 'Catégorie', '');
+  remplirSelect($('.v-sous', div), [], 'Sous-catégorie', '');
+  $('.v-categorie', div).onchange = () => remplirSelect($('.v-sous', div), listeSousCategories($('.v-categorie', div).value), 'Sous-catégorie', '');
+  $('.v-montant', div).oninput = majTotalVentilation;
+  $('.suppr', div).onclick = () => { div.remove(); majTotalVentilation(); };
+}
+
+function lignesVentilation() {
+  return $$('#lignesVentilation .ligne-ventilation').map(div => ({
+    designation: $('.v-designation', div).value.trim(), categorie: $('.v-categorie', div).value,
+    sous_categorie: $('.v-sous', div).value, montantTexte: $('.v-montant', div).value, div
+  })).filter(l => l.designation || l.categorie || l.montantTexte);
+}
+
+function majTotalVentilation() {
+  let t = 0; lignesVentilation().forEach(l => { try { t += calculer(l.montantTexte) || 0; } catch (e) { /* ignoré */ } });
+  $('#totalVentilation').textContent = 'Total : ' + euros(t);
+}
+
+function occurrencesSerie(serie, annee) {
+  const intervalle = INTERVALLES[serie.frequence];
+  if (!intervalle || !serie.debut) return [];
+  const [dy, dm] = serie.debut.split('-').map(Number);
+  const jour = Number(serie.jour) || Number(serie.debut.slice(8, 10));
+  const res = [];
+  for (let m = 1; m <= 12; m++) {
+    const ecart = (annee - dy) * 12 + (m - dm);
+    if (ecart < 0 || ecart % intervalle) continue;
+    const d = ymd(annee, m, Math.min(jour, joursDansMois(annee, m)));
+    if (serie.fin && d > serie.fin) continue;
+    res.push(d);
+  }
+  return res;
+}
+
+function marquer(el, ok) { el.classList.toggle('invalide', !ok); return ok; }
+
+function enregistrer(ev) {
+  ev.preventDefault();
+  const err = $('#erreurForm'); err.textContent = '';
+  $$('#formulaire .invalide').forEach(x => x.classList.remove('invalide'));
+  const type = typeCourant;
+  const date = $('#date').value;
+  const compte = $('#compte').value;
+  const commun = {
+    type, date, compte, enseigne: type === 'VIREMENT' ? '' : $('#enseigne').value,
+    paiement: type === 'VIREMENT' ? 'Virement' : $('#paiement').value,
+    compte_vers: type === 'VIREMENT' ? $('#vers').value : '',
+    commentaire: $('#commentaire').value.trim()
+  };
+  let ok = marquer($('#date'), !!date) & marquer($('#compte'), !!compte);
+  if (type === 'VIREMENT') ok &= marquer($('#vers'), !!commun.compte_vers && commun.compte_vers !== compte);
+  const signe = v => type === 'DEPENSE' ? -Math.abs(v) : Math.abs(v);
+
+  // --- Ventilation : plusieurs lignes, même date / compte / paiement / enseigne ---
+  if (!edition && $('#ventiler').checked) {
+    const lignes = lignesVentilation();
+    if (!lignes.length) { err.textContent = 'Ajoute au moins une ligne.'; return; }
+    const ops = [];
+    lignes.forEach(l => {
+      let v = null; try { v = calculer(l.montantTexte); } catch (e) { /* invalide */ }
+      ok &= marquer($('.v-designation', l.div), !!l.designation) & marquer($('.v-categorie', l.div), !!l.categorie) &
+        marquer($('.v-sous', l.div), !!l.sous_categorie) & marquer($('.v-montant', l.div), v > 0);
+      ops.push(Object.assign({ id: nouvelId() }, commun, { designation: l.designation, categorie: l.categorie,
+        sous_categorie: l.sous_categorie, montant: signe(v || 0), pointe: false, serie_id: '', source: 'appli' }));
+    });
+    if (!ok) { err.textContent = 'Complète les champs en rouge.'; return; }
+    modifier(ops.map(o => ({ table: 'Operations', op: 'upsert', data: o })));
+    return terminerSaisie(date, ops.length + ' lignes enregistrées');
+  }
+
+  let montant = null;
+  try { montant = calculer($('#montant').value); } catch (e) { /* invalide */ }
+  ok &= marquer($('#montant'), montant > 0);
+  const categorie = type === 'VIREMENT' ? '' : $('#categorie').value;
+  const sous = type === 'VIREMENT' ? '' : $('#sous_categorie').value;
+  if (type !== 'VIREMENT') ok &= marquer($('#categorie'), !!categorie) & marquer($('#sous_categorie'), !!sous);
+  if (!ok) { err.textContent = 'Complète les champs en rouge.'; return; }
+  let designation = $('#designation').value.trim();
+  if (!designation) designation = type === 'VIREMENT' ? 'Virement ' + compte + ' → ' + commun.compte_vers : (commun.enseigne || sous);
+  const fiche = Object.assign({}, commun, { designation, categorie, sous_categorie: sous, montant: signe(montant) });
+
+  // --- Modification ---
+  if (edition) {
+    const muts = [{ table: 'Operations', op: 'upsert', data: Object.assign({ id: edition.id, pointe: $('#pointe').checked }, fiche) }];
+    if (edition.serie_id && $('#suivantes').checked) {
+      const jour = Number(date.slice(8, 10));
+      data.Operations.filter(o => o.serie_id === edition.serie_id && o.date > edition.date && !o.pointe).forEach(o => {
+        const [y, m] = o.date.split('-').map(Number);
+        muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({}, fiche, {
+          id: o.id, date: ymd(y, m, Math.min(jour, joursDansMois(y, m))), commentaire: o.commentaire }) });
+      });
+      muts.push({ table: 'Series', op: 'upsert', data: Object.assign({ id: edition.serie_id, jour },
+        { type, designation, enseigne: fiche.enseigne, categorie, sous_categorie: sous, compte, compte_vers: fiche.compte_vers,
+          paiement: fiche.paiement, montant: fiche.montant }) });
+    }
+    modifier(muts);
+    return terminerSaisie(date, 'Opération modifiée');
+  }
+
+  // --- Nouvelle opération, éventuellement récurrente ---
+  const frequence = $('#frequence').value;
+  if (frequence === 'UNE_FOIS') {
+    modifier([{ table: 'Operations', op: 'upsert', data: Object.assign({ id: nouvelId(), pointe: false, serie_id: '', source: 'appli' }, fiche) }]);
+    return terminerSaisie(date, 'Enregistré');
+  }
+  const serie = Object.assign({ id: 'S-' + nouvelId(), frequence, jour: Number(date.slice(8, 10)), debut: date, fin: '', actif: true }, fiche);
+  delete serie.date; delete serie.commentaire;
+  const annee = Number(date.slice(0, 4));
+  const annees = [annee];
+  if (param('annee_generee_' + (annee + 1))) annees.push(annee + 1);
+  const muts = [{ table: 'Series', op: 'upsert', data: serie }];
+  annees.forEach(a => occurrencesSerie(serie, a).filter(d => d >= date).forEach(d => {
+    muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({}, fiche, {
+      id: nouvelId(), date: d, pointe: false, serie_id: serie.id, source: 'appli', commentaire: d === date ? fiche.commentaire : '' }) });
+  }));
+  modifier(muts);
+  terminerSaisie(date, (muts.length - 1) + ' échéance(s) créée(s)');
+}
+
+function terminerSaisie(date, message) {
+  local.derniereDate = date; local.derniereDateTs = Date.now();
+  local.vacances = $('#modeVacances').checked;
+  ecrire(LS.local, local);
+  const lieu = $('#lieuVacances').value.trim().toUpperCase();
+  if (local.vacances && lieu !== param('lieu_vacances')) modifier([{ table: 'Parametres', op: 'upsert', data: { cle: 'lieu_vacances', valeur: lieu } }]);
+  toast(message);
+  const retour = edition ? 'journal' : 'accueil';
+  edition = null;
+  afficherVue(retour);
+}
+
+function supprimerOperation() {
+  if (!edition) return;
+  const serie = edition.serie_id && $('#suivantes').checked;
+  if (!confirm(serie ? 'Supprimer cette échéance et toutes les suivantes non pointées ?' : 'Supprimer cette opération ?')) return;
+  const muts = [{ table: 'Operations', op: 'delete', data: { id: edition.id } }];
+  if (serie) {
+    data.Operations.filter(o => o.serie_id === edition.serie_id && o.date > edition.date && !o.pointe)
+      .forEach(o => muts.push({ table: 'Operations', op: 'delete', data: { id: o.id } }));
+    muts.push({ table: 'Series', op: 'upsert', data: { id: edition.serie_id, fin: decalerJours(edition.date, -1) } });
+  }
+  modifier(muts);
+  edition = null;
+  toast('Supprimé');
+  afficherVue('journal');
+}
+
+function enregistrerFavori() {
+  const designation = $('#designation').value.trim();
+  const categorie = $('#categorie').value, sous = $('#sous_categorie').value;
+  if (typeCourant === 'VIREMENT' || !categorie || !sous) { toast('Choisis au moins une catégorie et une sous-catégorie.', true); return; }
+  const nom = prompt('Nom du favori :', designation || sous);
+  if (!nom) return;
+  modifier([{ table: 'Favoris', op: 'upsert', data: { id: nouvelId(), nom: nom.trim(), type: typeCourant, designation: designation || sous,
+    enseigne: $('#enseigne').value, categorie, sous_categorie: sous, compte: $('#compte').value, paiement: $('#paiement').value, utilisations: 0 } }]);
+  rendreRaccourcis();
+  toast('Favori ajouté');
+}
+
+function ajouterReference(quoi) {
+  if (quoi === 'enseigne') {
+    const nom = (prompt('Nouvelle enseigne :') || '').trim(); if (!nom) return;
+    modifier([{ table: 'Enseignes', op: 'upsert', data: { enseigne: nom } }]);
+    remplirSelect($('#enseigne'), trierFr(data.Enseignes.map(e => e.enseigne)), '—', nom);
+  } else if (quoi === 'categorie') {
+    const nom = (prompt('Nouvelle catégorie :') || '').trim(); if (!nom) return;
+    const sc = (prompt('Première sous-catégorie de « ' + nom + ' » :') || '').trim(); if (!sc) return;
+    modifier([{ table: 'Categories', op: 'upsert', data: { categorie: nom, sous_categorie: sc } }]);
+    remplirSelect($('#categorie'), listeCategories(), '— choisir —', nom); chargerSousCategories(sc);
+  } else {
+    const cat = $('#categorie').value; if (!cat) { toast('Choisis d\'abord une catégorie.', true); return; }
+    const sc = (prompt('Nouvelle sous-catégorie de « ' + cat + ' » :') || '').trim(); if (!sc) return;
+    modifier([{ table: 'Categories', op: 'upsert', data: { categorie: cat, sous_categorie: sc } }]);
+    chargerSousCategories(sc);
+  }
+}
+
+function definirDefaut(k) {
+  const v = $('#' + k).value; if (!v) { toast('Choisis d\'abord une valeur.', true); return; }
+  modifier([{ table: 'Parametres', op: 'upsert', data: { cle: k + '_defaut', valeur: v } }]);
+  majEtoiles();
+  toast((k === 'compte' ? 'Compte' : 'Paiement') + ' par défaut : ' + v);
+}
+
+
+/* ================= Réglages ================= */
+
+function rendreReglages(erreur) {
+  $('#cfgUrl').value = config.url || '';
+  $('#cfgToken').value = config.token || '';
+  const info = [];
+  if (local.derniereSync) info.push('Dernière synchro : ' + new Date(local.derniereSync).toLocaleString('fr-FR'));
+  if (outbox.length) info.push(outbox.length + ' modification(s) en attente d\'envoi');
+  if (erreur) info.push('⚠ ' + erreur);
+  $('#infoSync').textContent = info.join(' · ') || 'Jamais synchronisé.';
+  const suiv = new Date().getFullYear() + 1;
+  $('#btnAnneeSuivante').textContent = param('annee_generee_' + suiv) ? 'Échéances ' + suiv + ' déjà préparées ✓' : 'Préparer les échéances ' + suiv;
+  $('#btnAnneeSuivante').disabled = !!param('annee_generee_' + suiv);
+  $('#version').textContent = 'Version ' + VERSION_APP;
+
+  $('#listeFavoris').innerHTML = data.Favoris.slice().sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr')).map(f =>
+    '<div class="item"><span>' + esc(f.nom) + '<span class="sous">' + esc([f.categorie, f.sous_categorie, f.compte].filter(Boolean).join(' › ')) + '</span></span>' +
+    '<span><button type="button" data-renommer="' + esc(f.id) + '">Renommer</button> <button type="button" data-suppr-fav="' + esc(f.id) + '">✕</button></span></div>'
+  ).join('') || '<p class="discret">Aucun favori.</p>';
+  $$('[data-renommer]').forEach(b => b.onclick = () => {
+    const f = data.Favoris.find(x => x.id === b.dataset.renommer); const nom = (prompt('Nouveau nom :', f.nom) || '').trim();
+    if (nom) modifier([{ table: 'Favoris', op: 'upsert', data: { id: f.id, nom } }]);
+  });
+  $$('[data-suppr-fav]').forEach(b => b.onclick = () => {
+    if (confirm('Supprimer ce favori ?')) modifier([{ table: 'Favoris', op: 'delete', data: { id: b.dataset.supprFav } }]);
+  });
+
+  const nomsFreq = { MENSUEL: 'mensuel', BIMESTRIEL: 'bimestriel', TRIMESTRIEL: 'trimestriel', QUADRIMESTRIEL: 'quadrimestriel', SEMESTRIEL: 'semestriel', ANNUEL: 'annuel' };
+  $('#listeSeries').innerHTML = '<p class="discret">Désactive celles qui ne doivent pas se répéter l\'an prochain.</p>' +
+    data.Series.slice().sort((a, b) => (b.actif === true) - (a.actif === true) || a.designation.localeCompare(b.designation, 'fr')).map(s =>
+      '<div class="item' + (s.actif ? '' : ' inactif') + '"><span>' + esc(s.designation) + '<span class="sous">' + (nomsFreq[s.frequence] || s.frequence) +
+      ' · le ' + s.jour + ' · ' + euros(s.montant) + (s.fin ? ' · jusqu\'au ' + s.fin.split('-').reverse().join('/') : '') + '</span></span>' +
+      '<button type="button" data-serie="' + esc(s.id) + '">' + (s.actif ? 'Désactiver' : 'Activer') + '</button></div>'
+    ).join('');
+  $$('[data-serie]').forEach(b => b.onclick = () => {
+    const s = data.Series.find(x => x.id === b.dataset.serie);
+    modifier([{ table: 'Series', op: 'upsert', data: { id: s.id, actif: !s.actif } }]);
+  });
+}
+
+
+/* ================= Démarrage ================= */
+
+function brancher() {
+  $$('.onglets button').forEach(b => b.onclick = () => { edition = null; afficherVue(b.dataset.vue); });
+  $('#fab').onclick = () => ouvrirFormulaire();
+  $('#etatSync').onclick = () => synchroniser();
+  $('#moisPrec').onclick = () => { let [y, m] = moisJournal; m--; if (!m) { m = 12; y--; } moisJournal = [y, m]; rendreJournal(); };
+  $('#moisSuiv').onclick = () => { let [y, m] = moisJournal; m++; if (m > 12) { m = 1; y++; } moisJournal = [y, m]; rendreJournal(); };
+  $('#filtreCompte').onchange = rendreJournal;
+  $('#recherche').oninput = rendreJournal;
+
+  $$('#segType button').forEach(b => b.onclick = () => definirType(b.dataset.type));
+  $('#categorie').onchange = () => chargerSousCategories('');
+  $('#compte').onchange = () => {
+    if (/^esp[eè]ces$/i.test($('#compte').value.normalize('NFD').replace(/[̀-ͯ]/g, ''))) {
+      const esp = data.Paiements.map(p => p.paiement).find(p => /^esp/i.test(p.normalize('NFD').replace(/[̀-ͯ]/g, '')));
+      if (esp) $('#paiement').value = esp;
+    }
+    majEtoiles();
+  };
+  $('#paiement').onchange = majEtoiles;
+  $('#designation').onchange = completerDepuisHistorique;
+  $('#montant').onblur = () => { try { const v = calculer($('#montant').value); if (v !== null) $('#montant').value = v.toFixed(2).replace('.', ','); } catch (e) { $('#montant').classList.add('invalide'); } };
+  $('#plus').onclick = () => { const m = $('#montant'); m.value += '+'; m.focus(); };
+  $$('.raccourcis-date button').forEach(b => b.onclick = () => { $('#date').value = decalerJours(aujourdhui(), Number(b.dataset.jours)); });
+  $$('.etoile').forEach(b => b.onclick = () => definirDefaut(b.dataset.defaut));
+  $$('.ajout').forEach(b => b.onclick = () => ajouterReference(b.dataset.ajout));
+  $('#modeVacances').onchange = rendreRaccourcis;
+  $('#lieuVacances').oninput = e => { e.target.value = e.target.value.toUpperCase(); };
+  $('#ventiler').onchange = basculerVentilation;
+  $('#ajoutLigne').onclick = ajouterLigneVentilation;
+  $('#formulaire').onsubmit = enregistrer;
+  $('#btnAnnuler').onclick = () => { const r = edition ? 'journal' : 'accueil'; edition = null; afficherVue(r); };
+  $('#btnSupprimer').onclick = supprimerOperation;
+  $('#btnFavori').onclick = enregistrerFavori;
+
+  $('#btnConnexion').onclick = () => {
+    config = { url: $('#cfgUrl').value.trim(), token: $('#cfgToken').value.trim() };
+    ecrire(LS.config, config);
+    toast('Connexion enregistrée, synchronisation…');
+    synchroniser();
+  };
+  $('#btnAnneeSuivante').onclick = async () => {
+    const an = new Date().getFullYear() + 1;
+    try { await synchroniser(); const r = await api('genererAnnee', { annee: an }); toast(r.creees + ' échéance(s) ' + an + ' créée(s)'); await synchroniser(); }
+    catch (e) { toast(e.message, true); }
+  };
+  $('#btnRecharger').onclick = () => {
+    if (outbox.length && !confirm(outbox.length + ' modification(s) pas encore envoyée(s). Elles seront conservées et renvoyées. Continuer ?')) return;
+    synchroniser();
+  };
+
+  window.addEventListener('online', synchroniser);
+  window.addEventListener('offline', () => majEtatSync());
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') synchroniser(); });
+}
+
+brancher();
+afficherVue(config.url ? 'accueil' : 'reglages');
+synchroniser();
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
