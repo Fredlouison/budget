@@ -301,12 +301,17 @@ details.carte[open] > summary { margin-bottom: 8px; }
 @media (max-width: 699px) {
   .ligne-montant-date { row-gap: 10px; }
   .bloc-date { flex: 1 1 100%; }
-  .barre-date input[type=date] { flex: 0 0 auto; width: 150px; height: 44px; min-height: 44px; -webkit-appearance: none; appearance: none;
+  .barre-date input[type=date] { flex: 1 1 0; width: auto; min-width: 0; height: 44px; min-height: 44px; -webkit-appearance: none; appearance: none;
     padding: 0 10px; font-size: 16px; line-height: 44px; text-align: left; }
   .barre-date input[type=date]::-webkit-date-and-time-value { text-align: left; }
-  .barre-date .mini { flex: 0 0 36px; width: 36px; }
+  .barre-date .mini { flex: 0 0 52px; width: 52px; }
   .barre-date .aujourdhui { display: none; }
   .ligne-montant-date > .pilule { flex: 0 0 auto; max-width: none; padding: 0 10px; font-size: 14px; }
   .bloc-montant { flex: 1 1 0; }
   .plus-moins { flex: 0 0 40px; }
 }
+
+/* Règle : pas de trous, chaque ligne remplie */
+.ligne-raccourcis .bouton-favoris { flex: 1 1 0; }
+.ligne-raccourcis .lieu { flex: 1 1 0; min-width: 0; }
+#btnAnneeSuivante, #btnRecharger { width: 100%; }
