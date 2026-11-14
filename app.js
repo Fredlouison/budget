@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.6.1';
+const VERSION_APP = '1.7.0';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -36,7 +36,7 @@ let derniereErreur = '';
 let avertiScript = false;
 let edition = null;   // opération en cours de modification
 let typeCourant = 'DEPENSE';
-let tousFavoris = false;
+let favorisOuverts = false;
 let idsSurlignes = new Set();
 let groupesOuverts = new Set();   // dépenses ventilées dépliées dans le journal   // lignes à mettre en évidence dans le journal après un enregistrement
 
@@ -517,6 +517,7 @@ function ouvrirFormulaire(opts) {
     $('#date').value = dateParDefaut();
     $('#modeVacances').checked = !!local.vacances;
     $('#lieuVacances').value = param('lieu_vacances');
+    favorisOuverts = false;
     rendreRaccourcis();
   }
   majEtoiles();
@@ -527,23 +528,28 @@ function ouvrirFormulaire(opts) {
 function rendreRaccourcis() {
   const vac = $('#modeVacances').checked;
   $('#lieuVacances').hidden = !vac;
-  let html;
+  $('#btnFavoris').classList.toggle('actif', favorisOuverts);
+  let html = '';
   if (vac) {
-    html = listeSousCategories('Vacances').map(sc => '<button type="button" data-vac="' + esc(sc) + '">' + esc(sc) + '</button>').join('');
-  } else {
-    const tries = data.Favoris.slice().sort((a, b) => (b.utilisations || 0) - (a.utilisations || 0) || String(a.nom).localeCompare(String(b.nom), 'fr'));
-    const visibles = tousFavoris ? tries : tries.slice(0, 8);
-    html = visibles.map(f => '<button type="button" data-fav="' + esc(f.id) + '">' + esc(f.nom || f.designation) + '</button>').join('') +
-      (tries.length > 8 ? '<button type="button" id="plusFavoris">' + (tousFavoris ? 'Moins' : '+' + (tries.length - 8) + ' autres') + '</button>' : '');
+    const sc = listeSousCategories('Vacances');
+    html += sc.map(x => '<button type="button" data-vac="' + esc(x) + '">' + esc(x) + '</button>').join('') ||
+      '<span class="vide">Aucune sous-catégorie « Vacances ».</span>';
   }
-  $('#favoris').innerHTML = html || '<span class="vide">' + (vac ? 'Aucune sous-catégorie « Vacances ».' : 'Aucun favori : remplis une saisie puis « ★ Enregistrer comme favori ».') + '</span>';
-  if ($('#plusFavoris')) $('#plusFavoris').onclick = () => { tousFavoris = !tousFavoris; rendreRaccourcis(); };
+  if (favorisOuverts) {
+    const tries = data.Favoris.slice().sort((a, b) => String(a.nom || a.designation).localeCompare(String(b.nom || b.designation), 'fr', { sensitivity: 'base' }));
+    html += tries.map(f => '<button type="button" data-fav="' + esc(f.id) + '">' + esc(f.nom || f.designation) + '</button>').join('') ||
+      '<span class="vide">Aucun favori : remplis une saisie puis « ★ Enregistrer comme favori ».</span>';
+  }
+  $('#favoris').innerHTML = html;
+  $('#favoris').hidden = !html;
   $$('#favoris [data-fav]').forEach(b => b.onclick = () => appliquerFavori(data.Favoris.find(f => f.id === b.dataset.fav)));
   $$('#favoris [data-vac]').forEach(b => b.onclick = () => appliquerVacances(b.dataset.vac));
 }
 
 function appliquerFavori(f) {
   if (!f) return;
+  favorisOuverts = false;          // la liste se replie après le choix
+  rendreRaccourcis();
   definirType(f.type === 'RECETTE' ? 'RECETTE' : 'DEPENSE');
   $('#designation').value = f.designation || '';
   remplirSelect($('#enseigne'), trierFr(data.Enseignes.map(e => e.enseigne)), '—', f.enseigne);
@@ -935,6 +941,7 @@ function brancher() {
   $$('.etoile').forEach(b => b.onclick = () => definirDefaut(b.dataset.defaut));
   $$('.ajout').forEach(b => b.onclick = () => ajouterReference(b.dataset.ajout));
   $('#modeVacances').onchange = rendreRaccourcis;
+  $('#btnFavoris').onclick = () => { favorisOuverts = !favorisOuverts; rendreRaccourcis(); };
   $('#lieuVacances').oninput = e => { e.target.value = e.target.value.toUpperCase(); };
   $('#ventiler').onchange = basculerVentilation;
   $('#ajoutLigne').onclick = ajouterLigneVentilation;

@@ -239,3 +239,5 @@ body.saisie .fab { display: none; }
 .compte-carte { cursor: pointer; }
 details.carte > summary + * { margin-top: 10px; }
 details.carte[open] > summary { margin-bottom: 8px; }
+.bouton-favoris { padding: 7px 12px; border: 1px solid var(--bord); border-radius: 999px; background: #fff; font-weight: 700; font-size: 14px; color: var(--texte); white-space: nowrap; }
+.bouton-favoris.actif { border-color: var(--jaune); background: #fff8d6; }
