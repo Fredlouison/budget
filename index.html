@@ -158,8 +158,7 @@
 
     <!-- RÉGLAGES -->
     <section id="vue-reglages" class="vue" hidden>
-      <div class="carte">
-        <h2>Connexion</h2>
+      <details class="carte" id="secConnexion"><summary>Connexion</summary>
         <label class="champ">Adresse du script (URL de l'application web)
           <input id="cfgUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec">
         </label>
@@ -168,22 +167,20 @@
         </label>
         <div class="actions"><button type="button" class="principal" id="btnConnexion">Enregistrer et synchroniser</button></div>
         <p id="infoSync" class="discret"></p>
-      </div>
+      </details>
 
-      <div class="carte">
-        <h2>Année suivante</h2>
+      <details class="carte" id="secAnnee"><summary>Année suivante</summary>
         <p class="discret">Les échéances récurrentes de l'année suivante sont créées automatiquement en décembre. Tu peux aussi le faire maintenant.</p>
         <button type="button" class="secondaire" id="btnAnneeSuivante"></button>
-      </div>
+      </details>
 
       <details class="carte"><summary>Favoris</summary><div id="listeFavoris"></div></details>
       <details class="carte"><summary>Opérations récurrentes</summary><div id="listeSeries"></div></details>
 
-      <div class="carte">
-        <h2>Maintenance</h2>
+      <details class="carte" id="secMaintenance"><summary>Maintenance</summary>
         <button type="button" class="secondaire" id="btnRecharger">Recharger toutes les données</button>
         <p class="discret" id="version"></p>
-      </div>
+      </details>
     </section>
   </main>
 

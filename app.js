@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.6.0';
+const VERSION_APP = '1.6.1';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -861,6 +861,7 @@ function definirDefaut(k) {
 /* ================= Réglages ================= */
 
 function rendreReglages(erreur) {
+  if (!config.url) $('#secConnexion').open = true;   // premier lancement : la connexion doit être visible
   $('#cfgUrl').value = config.url || '';
   $('#cfgToken').value = config.token || '';
   const info = [];
