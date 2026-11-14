@@ -1,6 +1,6 @@
 /* Service worker : met l'appli en cache pour qu'elle s'ouvre sans réseau.
  * Pour publier une nouvelle version, changer VERSION (et VERSION_APP dans app.js). */
-const VERSION = 'budget-1.8.2';
+const VERSION = 'budget-1.9.0';
 const FICHIERS = ['./', 'index.html', 'app.js', 'style.css', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -17,8 +17,10 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return; // l'API passe directement
   // Réseau d'abord (pour recevoir les mises à jour), cache si hors connexion.
+  // cache: 'no-cache' : on revalide toujours auprès du serveur (sinon le téléphone peut resservir une vieille copie).
+  const frais = req.mode === 'navigate' ? fetch(req.url, { cache: 'no-cache' }) : fetch(req, { cache: 'no-cache' });
   e.respondWith(
-    fetch(req).then(rep => {
+    frais.then(rep => {
       const copie = rep.clone();
       caches.open(VERSION).then(c => c.put(req, copie));
       return rep;

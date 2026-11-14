@@ -259,3 +259,14 @@ details.carte[open] > summary { margin-bottom: 8px; }
 .plus-moins { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; flex: 0 0 34px; }
 .plus-moins button { height: 21px; padding: 0; border: 1px solid var(--bord); border-radius: 6px; background: #fff; font-size: 15px; line-height: 1; }
 .bloc-montant { flex: 1 1 150px; }
+
+/* Téléphone : date seule sur sa ligne, puis flèches / Aujourd'hui / Ventiler élargis */
+@media (max-width: 699px) {
+  .bloc-date { flex: 1 1 100%; }
+  .barre-date { flex-wrap: wrap; row-gap: 6px; }
+  .barre-date input[type=date] { flex: 1 1 100%; width: 100%; font-size: 16px; text-align: left; }
+  .barre-date .mini { flex: 1 1 0; width: auto; font-size: 14px; }
+  .barre-date .aujourdhui, .barre-date .pilule { flex: 2 1 0; font-size: 14px; }
+  .bloc-montant { flex: 1 1 100%; }
+  .plus-moins { flex: 0 0 44px; }
+}
