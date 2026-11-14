@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.0.0';
+const VERSION_APP = '1.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
   Operations: ['id'], Series: ['id'], Comptes: ['nom'], Arretes: ['compte', 'annee', 'mois'],
@@ -35,6 +35,7 @@ let derniereErreur = '';
 let edition = null;   // opération en cours de modification
 let typeCourant = 'DEPENSE';
 let tousFavoris = false;
+let idsSurlignes = new Set();   // lignes à mettre en évidence dans le journal après un enregistrement
 
 function videData() {
   const d = {}; Object.keys(CLES).forEach(t => { d[t] = []; }); return d;
@@ -310,7 +311,7 @@ function rendreJournal() {
     const sous = o.type === 'VIREMENT'
       ? 'Virement · ' + esc(o.compte) + ' → ' + esc(o.compte_vers)
       : esc([o.categorie, o.sous_categorie].filter(Boolean).join(' › ')) + ' · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '');
-    html += '<div class="op' + (!o.pointe && o.date > jour ? ' prevue' : '') + '" data-id="' + esc(o.id) + '">' +
+    html += '<div class="op' + (!o.pointe && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '">' +
       '<input type="checkbox" class="coche" ' + (o.pointe ? 'checked' : '') + ' aria-label="Pointée">' +
       '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' 💬' : '') + '</div>' +
       '<div class="s">' + sous + '</div></div>' +
@@ -361,6 +362,18 @@ function majEtoiles() {
   });
 }
 
+function majJourSemaine() {
+  const v = $('#date').value;
+  if (!v) { $('#jourSemaine').textContent = ''; return; }
+  const [y, m, d] = v.split('-').map(Number);
+  $('#jourSemaine').textContent = new Date(y, m - 1, d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function changerJour(n) {
+  $('#date').value = decalerJours($('#date').value || aujourdhui(), n);
+  majJourSemaine();
+}
+
 function dateParDefaut() {
   // Garde la dernière date saisie pendant 30 min (pratique pour une série de tickets), sinon aujourd'hui.
   if (local.derniereDate && Date.now() - local.derniereDateTs < 30 * 60 * 1000) return local.derniereDate;
@@ -408,6 +421,7 @@ function ouvrirFormulaire(opts) {
     rendreRaccourcis();
   }
   majEtoiles();
+  majJourSemaine();
   afficherVue('saisie');
   if (!edition) setTimeout(() => $('#montant').focus(), 50);
 }
@@ -554,7 +568,7 @@ function enregistrer(ev) {
     });
     if (!ok) { err.textContent = 'Complète les champs en rouge.'; return; }
     modifier(ops.map(o => ({ table: 'Operations', op: 'upsert', data: o })));
-    return terminerSaisie(date, ops.length + ' lignes enregistrées');
+    return terminerSaisie(date, ops.length + ' lignes enregistrées', ops.map(o => o.id));
   }
 
   let montant = null;
@@ -583,14 +597,15 @@ function enregistrer(ev) {
           paiement: fiche.paiement, montant: fiche.montant }) });
     }
     modifier(muts);
-    return terminerSaisie(date, 'Opération modifiée');
+    return terminerSaisie(date, 'Opération modifiée', [edition.id]);
   }
 
   // --- Nouvelle opération, éventuellement récurrente ---
   const frequence = $('#frequence').value;
   if (frequence === 'UNE_FOIS') {
-    modifier([{ table: 'Operations', op: 'upsert', data: Object.assign({ id: nouvelId(), pointe: false, serie_id: '', source: 'appli' }, fiche) }]);
-    return terminerSaisie(date, 'Enregistré');
+    const id = nouvelId();
+    modifier([{ table: 'Operations', op: 'upsert', data: Object.assign({ id, pointe: false, serie_id: '', source: 'appli' }, fiche) }]);
+    return terminerSaisie(date, 'Enregistré', [id]);
   }
   const serie = Object.assign({ id: 'S-' + nouvelId(), frequence, jour: Number(date.slice(8, 10)), debut: date, fin: '', actif: true }, fiche);
   delete serie.date; delete serie.commentaire;
@@ -603,19 +618,27 @@ function enregistrer(ev) {
       id: nouvelId(), date: d, pointe: false, serie_id: serie.id, source: 'appli', commentaire: d === date ? fiche.commentaire : '' }) });
   }));
   modifier(muts);
-  terminerSaisie(date, (muts.length - 1) + ' échéance(s) créée(s)');
+  terminerSaisie(date, (muts.length - 1) + ' échéance(s) créée(s)', muts.filter(m => m.table === 'Operations' && m.data.date === date).map(m => m.data.id));
 }
 
-function terminerSaisie(date, message) {
+function terminerSaisie(date, message, ids) {
   local.derniereDate = date; local.derniereDateTs = Date.now();
   local.vacances = $('#modeVacances').checked;
   ecrire(LS.local, local);
   const lieu = $('#lieuVacances').value.trim().toUpperCase();
   if (local.vacances && lieu !== param('lieu_vacances')) modifier([{ table: 'Parametres', op: 'upsert', data: { cle: 'lieu_vacances', valeur: lieu } }]);
   toast(message);
-  const retour = edition ? 'journal' : 'accueil';
   edition = null;
-  afficherVue(retour);
+  // Retour au journal, sur le mois de l'opération, ligne mise en évidence.
+  idsSurlignes = new Set(ids || []);
+  moisJournal = [Number(date.slice(0, 4)), Number(date.slice(5, 7))];
+  $('#recherche').value = '';
+  const filtre = $('#filtreCompte').value;
+  const ops = data.Operations.filter(o => idsSurlignes.has(o.id));
+  if (filtre && !ops.some(o => o.compte === filtre || o.compte_vers === filtre)) $('#filtreCompte').value = '';
+  afficherVue('journal');
+  const ligne = $('#listeOps .op.surligne');
+  if (ligne) ligne.scrollIntoView({ block: 'center' });
 }
 
 function supprimerOperation() {
@@ -716,7 +739,7 @@ function rendreReglages(erreur) {
 /* ================= Démarrage ================= */
 
 function brancher() {
-  $$('.onglets button').forEach(b => b.onclick = () => { edition = null; afficherVue(b.dataset.vue); });
+  $$('.onglets button').forEach(b => b.onclick = () => { edition = null; idsSurlignes = new Set(); afficherVue(b.dataset.vue); });
   $('#fab').onclick = () => ouvrirFormulaire();
   $('#etatSync').onclick = () => synchroniser();
   $('#moisPrec').onclick = () => { let [y, m] = moisJournal; m--; if (!m) { m = 12; y--; } moisJournal = [y, m]; rendreJournal(); };
@@ -737,7 +760,10 @@ function brancher() {
   $('#designation').onchange = completerDepuisHistorique;
   $('#montant').onblur = () => { try { const v = calculer($('#montant').value); if (v !== null) $('#montant').value = v.toFixed(2).replace('.', ','); } catch (e) { $('#montant').classList.add('invalide'); } };
   $('#plus').onclick = () => { const m = $('#montant'); m.value += '+'; m.focus(); };
-  $$('.raccourcis-date button').forEach(b => b.onclick = () => { $('#date').value = decalerJours(aujourdhui(), Number(b.dataset.jours)); });
+  $$('.raccourcis-date button').forEach(b => b.onclick = () => { $('#date').value = decalerJours(aujourdhui(), Number(b.dataset.jours)); majJourSemaine(); });
+  $('#jourPlus').onclick = () => changerJour(1);
+  $('#jourMoins').onclick = () => changerJour(-1);
+  $('#date').onchange = majJourSemaine;
   $$('.etoile').forEach(b => b.onclick = () => definirDefaut(b.dataset.defaut));
   $$('.ajout').forEach(b => b.onclick = () => ajouterReference(b.dataset.ajout));
   $('#modeVacances').onchange = rendreRaccourcis;

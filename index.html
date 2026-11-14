@@ -60,20 +60,26 @@
           <button type="button" data-type="VIREMENT">Virement</button>
         </div>
 
-        <div class="grille2">
-          <label class="champ" id="champMontant">Montant
-            <span class="avec-bouton">
-              <input id="montant" inputmode="decimal" placeholder="0,00 ou 12,5+3">
-              <button type="button" id="plus" class="mini" aria-label="Ajouter +">+</button>
-            </span>
-          </label>
-          <label class="champ">Date
+        <label class="champ" id="champMontant">Montant
+          <span class="avec-bouton">
+            <input id="montant" inputmode="decimal" placeholder="0,00 ou 12,5+3">
+            <button type="button" id="plus" class="mini" aria-label="Ajouter +">+</button>
+          </span>
+        </label>
+
+        <div class="champ">Date
+          <span class="avec-bouton">
+            <button type="button" id="jourMoins" class="mini" aria-label="Jour précédent">▼</button>
             <input id="date" type="date">
+            <button type="button" id="jourPlus" class="mini" aria-label="Jour suivant">▲</button>
+          </span>
+          <span class="ligne-date">
+            <span id="jourSemaine" class="discret"></span>
             <span class="raccourcis-date">
               <button type="button" data-jours="0">Aujourd'hui</button>
               <button type="button" data-jours="-1">Hier</button>
             </span>
-          </label>
+          </span>
         </div>
 
         <label class="champ" id="champDesignation">Désignation

@@ -97,8 +97,10 @@ details.autres > summary { color: var(--discret); padding: 8px 4px; }
 .avec-bouton { display: flex; gap: 6px; }
 .avec-bouton input { flex: 1; }
 .mini { width: 44px; margin-top: 4px; border: 1px solid var(--bord); border-radius: 10px; background: #fff; font-size: 20px; }
-.raccourcis-date { display: flex; gap: 6px; margin-top: 6px; }
-.raccourcis-date button { flex: 1; padding: 6px; border: 1px solid #16a34a; background: #dcfce7; color: #166534; border-radius: 8px; font-weight: 700; font-size: 12px; }
+.ligne-date { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; font-weight: 600; }
+#jourSemaine { text-transform: capitalize; }
+.raccourcis-date { display: flex; gap: 6px; }
+.raccourcis-date button { padding: 6px 10px; border: 1px solid #16a34a; background: #dcfce7; color: #166534; border-radius: 8px; font-weight: 700; font-size: 12px; }
 .etoile, .ajout { border: 0; background: none; font-size: 15px; padding: 0 4px; color: var(--discret); cursor: pointer; }
 .etoile.actif { color: var(--jaune); }
 .ajout { color: #fff; background: var(--rouge); border-radius: 4px; font-size: 12px; line-height: 16px; padding: 0 5px; margin-left: 2px; }
@@ -169,3 +171,6 @@ body.saisie .fab { display: none; }
   #comptes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   #comptes .carte { margin: 0; }
 }
+
+.op.surligne { border: 2px solid var(--accent); background: #eaf1ff; animation: flash 1.2s ease-out 2; }
+@keyframes flash { 50% { background: #c7dbff; } }
