@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.13.2';
+const VERSION_APP = '1.14.0';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -67,6 +67,16 @@ function esc(s) {
 }
 function trierFr(liste) { return liste.slice().sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' })); }
 function param(cle) { const p = data.Parametres.find(x => x.cle === cle); return p ? p.valeur : ''; }
+
+/** Couleur d'un compte (paramètre « couleur:<nom> »), et sa version très claire pour le fond des lignes. */
+function couleurCompte(nom) { return param('couleur:' + nom) || ''; }
+function fondCompte(nom) {
+  const c = couleurCompte(nom);
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c);
+  if (!m) return '';
+  const clair = h => Math.round(255 - (255 - parseInt(h, 16)) * 0.12);   // 12 % de la couleur sur fond blanc
+  return 'rgb(' + clair(m[1]) + ',' + clair(m[2]) + ',' + clair(m[3]) + ')';
+}
 
 /** Première lettre de chaque mot en majuscule (le reste est laissé tel quel). */
 function majusculesMots(texte) {
@@ -410,7 +420,9 @@ function rendreJournal() {
     const sous = o.type === 'VIREMENT'
       ? 'Virement · ' + esc(o.compte) + ' → ' + esc(o.compte_vers)
       : esc([o.categorie, o.sous_categorie].filter(Boolean).join(' › ')) + (extra ? '' : ' · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : ''));
-    return '<div class="op' + (!o.pointe && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '">' +
+    const fond = fondCompte(o.compte);
+    return '<div class="op' + (!o.pointe && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
+      (fond ? ' style="background:' + fond + '"' : '') + '>' +
       '<input type="checkbox" class="coche" ' + (o.pointe ? 'checked' : '') + ' aria-label="Pointée">' +
       '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' 💬' : '') + '</div>' +
       '<div class="s">' + sous + '</div></div>' +
@@ -431,7 +443,9 @@ function rendreJournal() {
     const ouvert = groupesOuverts.has(el.groupe);
     const titre = [o.enseigne, o.groupe_libelle].filter(Boolean).join(' — ') || 'Dépense ventilée';
     const surligne = el.enfants.some(x => idsSurlignes.has(x.id));
-    html += '<div class="op groupe' + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '">' +
+    const fondG = fondCompte(o.compte);
+    html += '<div class="op groupe' + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '"' +
+      (fondG ? ' style="background:' + fondG + '"' : '') + '>' +
       '<input type="checkbox" class="coche" ' + (toutPointe ? 'checked' : '') + ' aria-label="Pointée">' +
       '<div class="lib"><div class="t"><span class="picto" title="Dépense ventilée">' + (ouvert ? '▾' : '▸') + ' ' + el.enfants.length + '</span>' + esc(titre) + (o.commentaire ? ' 💬' : '') + '</div>' +
       '<div class="s">Ventilée · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '') + '</div></div>' +
@@ -972,7 +986,9 @@ function rendreReglages(erreur) {
 
   const jourR = aujourdhui();
   $('#listeComptesReglages').innerHTML = data.Comptes.slice().sort((a, b) => (a.ordre || 0) - (b.ordre || 0)).map(c =>
-    '<div class="item' + (c.actif === false ? ' inactif' : '') + '"><span>' + esc(c.nom) + (c.actif === false ? ' (désactivé)' : '') +
+    '<div class="item' + (c.actif === false ? ' inactif' : '') + '"><span>' +
+    (couleurCompte(c.nom) ? '<span class="pastille" style="background:' + esc(couleurCompte(c.nom)) + '"></span>' : '') +
+    esc(c.nom) + (c.actif === false ? ' (désactivé)' : '') +
     '<span class="sous">Départ ' + euros(c.solde_initial) + (c.date_solde ? ' au ' + c.date_solde.split('-').reverse().join('/') : '') +
     ' · aujourd\'hui ' + euros(soldesCompte(c, jourR).aujourdhui) + '</span></span>' +
     '<button type="button" data-fiche="' + esc(c.nom) + '">Modifier</button></div>').join('') || '<p class="discret">Aucun compte.</p>';
@@ -1007,6 +1023,7 @@ function rendreReglages(erreur) {
 /* ================= Comptes (ajout, modification, désactivation, suppression) ================= */
 
 let compteEdite = null;
+let couleurChoisie = '';
 
 function ouvrirFicheCompte(nom) {
   compteEdite = nom ? data.Comptes.find(c => c.nom === nom) : null;
@@ -1017,6 +1034,9 @@ function ouvrirFicheCompte(nom) {
   $('#fcSolde').value = c ? String(Number(c.solde_initial) || 0).replace('.', ',') : '';
   $('#fcDate').value = c ? (c.date_solde || '') : decalerJours(aujourdhui(), -1);
   $('#fcActif').checked = c ? c.actif !== false : true;
+  couleurChoisie = c ? couleurCompte(c.nom) : '';
+  $('#fcCouleur').value = couleurChoisie || '#ffffff';
+  $('#fcSansCouleur').classList.toggle('actif', !couleurChoisie);
   $('#fcErreur').textContent = '';
   $('#fcSupprimer').hidden = !c;
   $('#ficheCompte').hidden = false;
@@ -1037,7 +1057,9 @@ function enregistrerFicheCompte() {
   try { solde = calculer($('#fcSolde').value); } catch (e) { err.textContent = 'Solde invalide.'; return; }
   if (!$('#fcDate').value) { err.textContent = 'Indique la date du solde de départ.'; return; }
   const ordre = compteEdite ? compteEdite.ordre : Math.max(0, ...data.Comptes.map(c => Number(c.ordre) || 0)) + 1;
-  modifier([{ table: 'Comptes', op: 'upsert', data: { nom, solde_initial: solde || 0, date_solde: $('#fcDate').value, ordre, actif: $('#fcActif').checked } }]);
+  const muts = [{ table: 'Comptes', op: 'upsert', data: { nom, solde_initial: solde || 0, date_solde: $('#fcDate').value, ordre, actif: $('#fcActif').checked } }];
+  if (couleurChoisie !== couleurCompte(nom)) muts.push({ table: 'Parametres', op: 'upsert', data: { cle: 'couleur:' + nom, valeur: couleurChoisie } });
+  modifier(muts);
   $('#ficheCompte').hidden = true;
   toast(compteEdite ? 'Compte modifié' : 'Compte ajouté');
 }
@@ -1047,7 +1069,9 @@ function supprimerFicheCompte() {
   const n = utilisationsCompte(c.nom);
   if (n) { $('#fcErreur').textContent = n + ' opération(s) utilisent ce compte : il ne peut pas être supprimé. Décoche « Compte actif » pour le masquer.'; return; }
   if (!confirm('Supprimer définitivement le compte « ' + c.nom + ' » ?')) return;
-  modifier([{ table: 'Comptes', op: 'delete', data: { nom: c.nom } }]);
+  const muts = [{ table: 'Comptes', op: 'delete', data: { nom: c.nom } }];
+  if (couleurCompte(c.nom)) muts.push({ table: 'Parametres', op: 'delete', data: { cle: 'couleur:' + c.nom } });
+  modifier(muts);
   $('#ficheCompte').hidden = true;
   toast('Compte supprimé');
 }
@@ -1065,6 +1089,8 @@ function brancher() {
   $('#fcEnregistrer').onclick = enregistrerFicheCompte;
   $('#fcAnnuler').onclick = () => { $('#ficheCompte').hidden = true; };
   $('#fcSupprimer').onclick = supprimerFicheCompte;
+  $('#fcCouleur').addEventListener('input', e => { couleurChoisie = e.target.value; $('#fcSansCouleur').classList.remove('actif'); });
+  $('#fcSansCouleur').onclick = () => { couleurChoisie = ''; $('#fcCouleur').value = '#ffffff'; $('#fcSansCouleur').classList.add('actif'); };
   $('#choixCompte').onclick = e => { if (e.target.id === 'choixCompte') $('#choixCompte').hidden = true; };
   $('#etatSync').onclick = () => synchroniser();
   $('#moisPrec').onclick = () => { let [y, m] = moisJournal; m--; if (!m) { m = 12; y--; } moisJournal = [y, m]; rendreJournal(); };

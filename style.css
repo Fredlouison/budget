@@ -315,3 +315,9 @@ details.carte[open] > summary { margin-bottom: 8px; }
 .ligne-raccourcis .bouton-favoris { flex: 1 1 0; }
 .ligne-raccourcis .lieu { flex: 1 1 0; min-width: 0; }
 #btnAnneeSuivante, #btnRecharger { width: 100%; }
+
+/* Couleur des comptes */
+#fcCouleur { flex: 1 1 0; height: 44px; padding: 3px; cursor: pointer; }
+#fcSansCouleur { flex: 1 1 0; padding: 0 10px; }
+#fcSansCouleur.actif { outline: 2px solid var(--accent); }
+.pastille { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.15); }
