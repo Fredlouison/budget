@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.11.0';
+const VERSION_APP = '1.12.0';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -471,10 +471,16 @@ function chargerSousCategories(valeur) {
   remplirSelect($('#sous_categorie'), listeSousCategories($('#categorie').value), $('#categorie').value ? '— choisir —' : '— catégorie d\'abord —', valeur);
 }
 
+/** Compte « Espèces » (pour les retraits). */
+function compteEspeces() {
+  return listeComptes().find(n => /^esp[eè]ces$/i.test(n.normalize('NFD').replace(/[\u0300-\u036f]/g, '')) || /^especes$/i.test(n.normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) || '';
+}
+
 function definirType(type) {
   typeCourant = type;
   $$('#segType button').forEach(b => b.classList.toggle('actif', b.dataset.type === type));
-  const vir = type === 'VIREMENT';
+  const vir = type === 'VIREMENT' || type === 'RETRAIT';
+  if (type === 'RETRAIT') $('#vers').value = compteEspeces();     // retrait = mouvement vers Espèces
   $('#champVers').hidden = !vir;
   $('#champPaiement').hidden = vir;
   $('#blocClassement').hidden = vir;
@@ -754,7 +760,7 @@ function enregistrer(ev) {
   $$('#formulaire .invalide').forEach(x => x.classList.remove('invalide'));
   manquants = [];
   if (document.activeElement === $('#dateTexte')) validerDateTexte();
-  const type = typeCourant;
+  const type = typeCourant === 'RETRAIT' ? 'VIREMENT' : typeCourant;   // un retrait est enregistré comme un mouvement
   const date = $('#date').value;
   const compte = $('#compte').value;
   const commun = {
@@ -908,7 +914,7 @@ function supprimerOperation() {
 function enregistrerFavori() {
   const designation = $('#designation').value.trim();
   const categorie = $('#categorie').value, sous = $('#sous_categorie').value;
-  if (typeCourant === 'VIREMENT' || !categorie || !sous) { toast('Choisis au moins une catégorie et une sous-catégorie.', true); return; }
+  if (typeCourant === 'VIREMENT' || typeCourant === 'RETRAIT' || !categorie || !sous) { toast('Choisis au moins une catégorie et une sous-catégorie.', true); return; }
   const nom = majusculesMots(prompt('Nom du favori :', designation || sous) || '');
   if (!nom) return;
   modifier([{ table: 'Favoris', op: 'upsert', data: { id: nouvelId(), nom: nom.trim(), type: typeCourant, designation: designation || sous,

@@ -59,7 +59,8 @@
         <div class="segment" id="segType">
           <button type="button" data-type="DEPENSE">Dépense</button>
           <button type="button" data-type="RECETTE">Recette</button>
-          <button type="button" data-type="VIREMENT">Virement</button>
+          <button type="button" data-type="VIREMENT"><span class="lib-pc">Mouvement</span><span class="lib-mobile">Virement</span></button>
+          <button type="button" data-type="RETRAIT" class="pc-seul">Retrait</button>
         </div>
 
         <div class="ligne-montant-date">
@@ -73,9 +74,9 @@
               <button type="button" id="jourMoins" class="mini" aria-label="Jour précédent">▼</button>
               <button type="button" id="jourPlus" class="mini" aria-label="Jour suivant">▲</button>
               <button type="button" id="btnAujourdhui" class="aujourdhui">Aujourd'hui</button>
-              <label class="pilule" id="champVentiler"><input type="checkbox" id="ventiler"> Ventiler</label>
             </div>
           </div>
+          <label class="pilule" id="champVentiler"><input type="checkbox" id="ventiler"> Ventiler</label>
           <label class="champ bloc-montant" id="champMontant">Montant
             <span class="avec-bouton">
               <input id="montant" inputmode="decimal" placeholder="0,00">
