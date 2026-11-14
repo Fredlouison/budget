@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.4.0';
+const VERSION_APP = '1.5.0';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -267,29 +267,26 @@ function rendreAccueil() {
         '<div>Pointé<b>' + euros(s.pointe) + '</b></div>' +
       '</div></div>';
 
-  // Comptes principaux : les plus utilisés sur les 3 derniers mois, sinon ceux qui ont un solde.
-  const depuis = decalerJours(jour, -92);
-  const usage = {};
-  data.Operations.forEach(o => { if (o.date >= depuis) { usage[o.compte] = (usage[o.compte] || 0) + 1; if (o.compte_vers) usage[o.compte_vers] = (usage[o.compte_vers] || 0) + 1; } });
-  const principaux = calcules.filter(x => (usage[x.c.nom] || 0) >= 10);
+  // 4 cartes choisies par l'utilisateur (par défaut : les plus utilisées) ; les autres comptes en dessous.
+  const nomsCartes = comptesTuiles('tuilesAccueil', 4);
+  const principaux = nomsCartes.map(n => calcules.find(x => x.c.nom === n)).filter(Boolean);
   const autres = calcules.filter(x => principaux.indexOf(x) === -1 && (x.s.utilise || Math.abs(x.s.aujourdhui) > 0.004));
   $('#comptes').innerHTML = principaux.map(carte).join('');
   $('#autresComptes').hidden = !autres.length;
   $('#autresComptes > div').innerHTML = autres.map(carte).join('');
-  $$('.compte-carte').forEach(el => el.onclick = () => {
-    $('#filtreCompte').value = el.dataset.compte; moisJournal = null; afficherVue('journal');
-  });
+  $$('#comptes .compte-carte').forEach((el, i) => el.onclick = () => ouvrirChoixCompte(i, 'tuilesAccueil', 4));
 }
 
-/** Les 3 comptes affichés en tuiles : choix mémorisé, sinon les 3 plus utilisés ces 3 derniers mois. */
-function comptesTuiles() {
+/** Comptes affichés en tuiles (journal : 3, accueil : 4) : choix mémorisé, sinon les plus utilisés ces 3 derniers mois. */
+function comptesTuiles(cle, nombre) {
+  cle = cle || 'tuiles'; nombre = nombre || 3;
   const noms = data.Comptes.map(c => c.nom);
-  const choix = (local.tuiles || []).filter(n => noms.indexOf(n) !== -1);
-  if (choix.length === 3) return choix;
+  const choix = (local[cle] || []).filter(n => noms.indexOf(n) !== -1).slice(0, nombre);
+  if (choix.length === nombre) return choix;
   const depuis = decalerJours(aujourdhui(), -92), usage = {};
   data.Operations.forEach(o => { if (o.date >= depuis) { usage[o.compte] = (usage[o.compte] || 0) + 1; if (o.compte_vers) usage[o.compte_vers] = (usage[o.compte_vers] || 0) + 1; } });
   const parUsage = noms.slice().sort((a, b) => (usage[b] || 0) - (usage[a] || 0));
-  parUsage.forEach(n => { if (choix.length < 3 && choix.indexOf(n) === -1) choix.push(n); });
+  parUsage.forEach(n => { if (choix.length < nombre && choix.indexOf(n) === -1) choix.push(n); });
   return choix;
 }
 
@@ -308,20 +305,23 @@ function rendreTuiles() {
   $$('#tuilesPointage .tuile').forEach(t => t.onclick = () => ouvrirChoixCompte(Number(t.dataset.index)));
 }
 
-function ouvrirChoixCompte(index) {
-  const actuels = comptesTuiles(), jour = aujourdhui();
+/** Fenêtre de choix du compte d'une tuile. cle = 'tuiles' (journal) ou 'tuilesAccueil'. */
+function ouvrirChoixCompte(index, cle, nombre) {
+  cle = cle || 'tuiles'; nombre = nombre || 3;
+  const actuels = comptesTuiles(cle, nombre), jour = aujourdhui();
+  const valeur = c => { const s = soldesCompte(c, jour); return cle === 'tuiles' ? s.pointeTotal : s.aujourdhui; };
   const comptes = data.Comptes.slice().sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
   $('#listeChoixComptes').innerHTML = comptes.map(c =>
     '<button type="button" class="choix' + (c.nom === actuels[index] ? ' courant' : '') + '" data-nom="' + esc(c.nom) + '">' +
-    '<span>' + esc(c.nom) + '</span><b>' + euros(soldesCompte(c, jour).pointeTotal) + '</b></button>').join('');
+    '<span>' + esc(c.nom) + '</span><b>' + euros(valeur(c)) + '</b></button>').join('');
   $$('#listeChoixComptes .choix').forEach(b => b.onclick = () => {
     const nouveaux = actuels.slice();
     const ailleurs = nouveaux.indexOf(b.dataset.nom);
     if (ailleurs !== -1 && ailleurs !== index) nouveaux[ailleurs] = nouveaux[index];   // échange si déjà affiché ailleurs
     nouveaux[index] = b.dataset.nom;
-    local.tuiles = nouveaux; ecrire(LS.local, local);
+    local[cle] = nouveaux; ecrire(LS.local, local);
     $('#choixCompte').hidden = true;
-    rendreTuiles();
+    rendre();
   });
   $('#choixCompte').hidden = false;
 }
