@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.21.0';
+const VERSION_APP = '1.22.0';
 const VERSION_SCRIPT_ATTENDUE = '2.2.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -280,23 +280,46 @@ function rendreAccueil() {
   // Comptes totalisés : choix mémorisé (par défaut, tous).
   const choixTotal = Array.isArray(local.comptesTotal) ? local.comptesTotal : null;
   const total = calcules.filter(x => !choixTotal || choixTotal.indexOf(x.c.nom) !== -1).reduce((t, x) => t + x.s.aujourdhui, 0);
-  $('#total').innerHTML = '<span class="discret lib-total">Total aujourd\'hui</span>' +
-    '<span class="montant-grand ' + (total < 0 ? 'neg' : '') + '">' + euros(total) + '</span>' +
-    '<span class="discret date-total"><span class="date-longue">' + new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) +
-    '</span><span class="date-courte">' + new Date().toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) + '</span></span>';
+  const totalises = calcules.filter(x => !choixTotal || choixTotal.indexOf(x.c.nom) !== -1);
+  const somme = cle => totalises.reduce((t, x) => t + x.s[cle], 0);
+  const maintenant = new Date();
+  const moisSuivCourt = new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 1).toLocaleDateString('fr-FR', { month: 'short' });
+  const classeMontant = v => v < 0 ? 'neg' : '';
+  const dateLongue = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // Bloc héros : total des comptes choisis + résumé fin de mois / engagé / pointé
+  $('#total').innerHTML =
+    '<div class="hero-ligne"><span class="hero-lib"><span class="date-longue">Total aujourd\'hui</span><span class="date-courte">Total</span></span>' +
+      '<span class="hero-montant ' + classeMontant(total) + '">' + euros(total) + '</span>' +
+      '<span class="hero-date"><span class="date-longue">' + dateLongue + '</span><span class="date-courte">' +
+      new Date().toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) + '</span></span></div>' +
+    '<div class="hero-bas">' +
+      '<div><span>Fin de mois</span><b class="' + classeMontant(somme('finMois')) + '">' + euros(somme('finMois')) + '</b></div>' +
+      '<div><span>Engagé ' + moisSuivCourt + '</span><b class="neg">' + euros(somme('engage')) + '</b></div>' +
+      '<div><span>Pointé</span><b>' + euros(somme('pointe')) + '</b></div>' +
+    '</div>' +
+    '<div class="hero-note">' + totalises.length + ' compte' + (totalises.length > 1 ? 's' : '') + ' · toucher pour choisir</div>';
   $('#total').onclick = ouvrirChoixTotal;
 
-  const nomMoisSuiv = MOIS[new Date().getMonth() === 11 ? 0 : new Date().getMonth() + 1];
-  const carte = ({ c, s }) =>
-    '<div class="carte compte-carte" data-compte="' + esc(c.nom) + '">' +
-      '<div class="entete"><span class="nom">' + esc(c.nom) + '</span>' +
-      '<span class="montant-grand ' + (s.aujourdhui < 0 ? 'neg' : '') + '">' + euros(s.aujourdhui) + '</span></div>' +
-      '<div class="details-solde">' +
-        '<div>Fin de mois<b class="' + (s.finMois < 0 ? 'neg' : '') + '">' + euros(s.finMois) + '</b></div>' +
-        '<div>Engagé ' + nomMoisSuiv + '<b>' + euros(s.engage) + '</b></div>' +
-        '<div>Différence<b class="' + (s.difference < 0 ? 'neg' : '') + '">' + euros(s.difference) + '</b></div>' +
-        '<div>Pointé<b>' + euros(s.pointe) + '</b></div>' +
+  // Carte de compte : pastille + nom, solde du jour, 4 indicateurs, halo de la couleur du compte
+  const carte = ({ c, s }) => {
+    const coul = couleurCompte(c.nom);
+    return '<div class="carte compte-carte" data-compte="' + esc(c.nom) + '"' + (coul ? ' style="--c:' + esc(coul) + '"' : '') + '>' +
+      '<div class="entete"><span class="nom"><i class="pastille-compte"></i>' + esc(c.nom) + '</span>' +
+      '<span class="montant-carte ' + classeMontant(s.aujourdhui) + '">' + euros(s.aujourdhui) + '</span></div>' +
+      '<div class="metriques">' +
+        '<div><span>Fin de mois</span><b class="' + classeMontant(s.finMois) + '">' + euros(s.finMois) + '</b></div>' +
+        '<div><span>Engagé ' + moisSuivCourt + '</span><b class="' + (s.engage < 0 ? 'neg' : '') + '">' + euros(s.engage) + '</b></div>' +
+        '<div><span>Différence</span><b class="' + (s.difference < 0 ? 'neg' : 'pos') + '">' + euros(s.difference) + '</b></div>' +
+        '<div><span>Pointé</span><b>' + euros(s.pointe) + '</b></div>' +
       '</div></div>';
+  };
+  // Autres comptes : liste compacte
+  const ligneAutre = ({ c, s }) => {
+    const coul = couleurCompte(c.nom);
+    return '<div class="ligne-autre"' + (coul ? ' style="--c:' + esc(coul) + '"' : '') + '><span class="nom"><i class="pastille-compte"></i>' + esc(c.nom) + '</span>' +
+      '<span class="pointe-autre">pointé ' + euros(s.pointe) + '</span><b class="' + classeMontant(s.aujourdhui) + '">' + euros(s.aujourdhui) + '</b></div>';
+  };
 
   // 4 cartes choisies par l'utilisateur (par défaut : les plus utilisées) ; les autres comptes en dessous.
   const nomsCartes = comptesTuiles('tuilesAccueil', 4);
@@ -304,7 +327,8 @@ function rendreAccueil() {
   const autres = calcules.filter(x => principaux.indexOf(x) === -1 && (x.s.utilise || Math.abs(x.s.aujourdhui) > 0.004));
   $('#comptes').innerHTML = principaux.map(carte).join('');
   $('#autresComptes').hidden = !autres.length;
-  $('#autresComptes > div').innerHTML = autres.map(carte).join('');
+  $('#autresComptes > summary').textContent = 'Autres comptes (' + autres.length + ') · ' + euros(autres.reduce((t, x) => t + x.s.aujourdhui, 0));
+  $('#autresComptes > div').innerHTML = autres.map(ligneAutre).join('');
   $$('#comptes .compte-carte').forEach((el, i) => el.onclick = () => ouvrirChoixCompte(i, 'tuilesAccueil', 4));
 }
 
@@ -1035,13 +1059,14 @@ function rendreReglages(erreur) {
 
   const jourR = aujourdhui();
   $('#listeComptesReglages').innerHTML = data.Comptes.slice().sort((a, b) => (a.ordre || 0) - (b.ordre || 0)).map(c =>
-    '<div class="item' + (c.actif === false ? ' inactif' : '') + '"><span>' +
+    '<div class="item item-compte' + (c.actif === false ? ' inactif' : '') + '" data-nom="' + esc(c.nom) + '"><span class="poignee" title="Glisser pour déplacer" aria-label="Déplacer">⠿</span><span class="corps-item">' +
     (couleurCompte(c.nom) ? '<span class="pastille" style="background:' + esc(couleurCompte(c.nom)) + '"></span>' : '') +
     esc(c.nom) + (c.actif === false ? ' (désactivé)' : '') +
     '<span class="sous">Départ ' + euros(c.solde_initial) + (c.date_solde ? ' au ' + c.date_solde.split('-').reverse().join('/') : '') +
     ' · aujourd\'hui ' + euros(soldesCompte(c, jourR).aujourdhui) + '</span></span>' +
     '<button type="button" data-fiche="' + esc(c.nom) + '">Modifier</button></div>').join('') || '<p class="discret">Aucun compte.</p>';
   $$('[data-fiche]').forEach(b => b.onclick = () => ouvrirFicheCompte(b.dataset.fiche));
+  $$('#listeComptesReglages .poignee').forEach(activerGlisser);
 
   $('#listeFavoris').innerHTML = data.Favoris.slice().sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr')).map(f =>
     '<div class="item"><span>' + esc(f.nom) + '<span class="sous">' + esc([f.categorie, f.sous_categorie, f.compte].filter(Boolean).join(' › ')) + '</span></span>' +
@@ -1065,6 +1090,43 @@ function rendreReglages(erreur) {
   $$('[data-serie]').forEach(b => b.onclick = () => {
     const s = data.Series.find(x => x.id === b.dataset.serie);
     modifier([{ table: 'Series', op: 'upsert', data: { id: s.id, actif: !s.actif } }]);
+  });
+}
+
+
+/* ================= Comptes : ordre par glisser-déposer ================= */
+
+function activerGlisser(poignee) {
+  poignee.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const item = poignee.closest('.item-compte'), liste = item.parentNode;
+    item.classList.add('deplace');
+    // Écoute sur toute la page : déplacer la ligne dans la liste ne doit pas interrompre le geste.
+    const bouger = ev => {
+      ev.preventDefault();
+      const autres = $$('.item-compte', liste).filter(x => x !== item);
+      const avant = autres.find(x => { const r = x.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
+      if (avant) { if (item.nextSibling !== avant) liste.insertBefore(item, avant); }
+      else if (liste.lastElementChild !== item) liste.appendChild(item);
+      if (ev.clientY < 90) window.scrollBy(0, -12);                      // défilement près des bords
+      else if (ev.clientY > window.innerHeight - 140) window.scrollBy(0, 12);
+    };
+    const finir = () => {
+      document.removeEventListener('pointermove', bouger);
+      document.removeEventListener('pointerup', finir);
+      document.removeEventListener('pointercancel', finir);
+      item.classList.remove('deplace');
+      const noms = $$('.item-compte', liste).map(x => x.dataset.nom);
+      const muts = [];
+      noms.forEach((nom, i) => {
+        const c = data.Comptes.find(x => x.nom === nom);
+        if (c && Number(c.ordre) !== i + 1) muts.push({ table: 'Comptes', op: 'upsert', data: { nom, ordre: i + 1 } });
+      });
+      if (muts.length) { modifier(muts); toast('Ordre des comptes enregistré'); }
+    };
+    document.addEventListener('pointermove', bouger, { passive: false });
+    document.addEventListener('pointerup', finir);
+    document.addEventListener('pointercancel', finir);
   });
 }
 
