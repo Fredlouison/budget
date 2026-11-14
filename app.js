@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.2.0';
+const VERSION_APP = '1.2.1';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
   Operations: ['id'], Series: ['id'], Comptes: ['nom'], Arretes: ['compte', 'annee', 'mois'],

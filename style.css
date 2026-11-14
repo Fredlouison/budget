@@ -97,7 +97,16 @@ details.autres > summary { color: var(--discret); padding: 8px 4px; }
 .avec-bouton { display: flex; gap: 6px; }
 .avec-bouton input { flex: 1; }
 .mini { width: 44px; margin-top: 4px; border: 1px solid var(--bord); border-radius: 10px; background: #fff; font-size: 20px; }
-.ligne-date { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; font-weight: 600; }
+.date-ventiler { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+.date-ventiler .champ { margin-bottom: 0; min-width: 0; }
+.date-ventiler input[type=date] { min-width: 0; }
+.pilule {
+  display: flex; align-items: center; gap: 6px; height: 44px; margin-top: 4px; padding: 0 12px;
+  border: 1px solid var(--bord); border-radius: 10px; background: #fff; font-weight: 700; font-size: 14px; white-space: nowrap; cursor: pointer;
+}
+.pilule input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.pilule:has(input:checked) { border-color: var(--accent); background: #eaf1ff; color: var(--accent); }
+.ligne-date { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 6px 0 12px; font-weight: 600; }
 #jourSemaine { text-transform: capitalize; }
 .raccourcis-date { display: flex; gap: 6px; }
 .raccourcis-date button { padding: 6px 10px; border: 1px solid #16a34a; background: #dcfce7; color: #166534; border-radius: 8px; font-weight: 700; font-size: 12px; }
