@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.3.1';
+const VERSION_APP = '1.4.0';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -67,6 +67,18 @@ function esc(s) {
 }
 function trierFr(liste) { return liste.slice().sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' })); }
 function param(cle) { const p = data.Parametres.find(x => x.cle === cle); return p ? p.valeur : ''; }
+
+/** Première lettre de chaque mot en majuscule (le reste est laissé tel quel). */
+function majusculesMots(texte) {
+  return String(texte || '').replace(/(^|[\s\-\/(])(\p{Ll})/gu, (m, avant, lettre) => avant + lettre.toUpperCase());
+}
+function majusculesChamp(champ) {
+  const v = majusculesMots(champ.value);
+  if (v === champ.value) return;
+  const debut = champ.selectionStart, fin = champ.selectionEnd;
+  champ.value = v;
+  try { champ.setSelectionRange(debut, fin); } catch (e) { /* champ sans curseur */ }
+}
 
 /** Montant saisi : accepte « 12,50 », « =12,5+3,20 », « 10*3 ». */
 function calculer(texte) {
@@ -455,16 +467,8 @@ function majEtoiles() {
   });
 }
 
-function majJourSemaine() {
-  const v = $('#date').value;
-  if (!v) { $('#jourSemaine').textContent = ''; return; }
-  const [y, m, d] = v.split('-').map(Number);
-  $('#jourSemaine').textContent = new Date(y, m - 1, d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-}
-
 function changerJour(n) {
   $('#date').value = decalerJours($('#date').value || aujourdhui(), n);
-  majJourSemaine();
 }
 
 function dateParDefaut() {
@@ -514,7 +518,6 @@ function ouvrirFormulaire(opts) {
     rendreRaccourcis();
   }
   majEtoiles();
-  majJourSemaine();
   afficherVue('saisie');
   if (!edition) setTimeout(() => $('#montant').focus(), 50);
 }
@@ -590,7 +593,7 @@ function basculerVentilation() {
 function ajouterLigneVentilation() {
   const div = document.createElement('div');
   div.className = 'ligne-ventilation';
-  div.innerHTML = '<input class="v-designation" placeholder="Désignation">' +
+  div.innerHTML = '<input class="v-designation majuscules" autocapitalize="words" placeholder="Désignation">' +
     '<input class="v-montant" inputmode="decimal" placeholder="Montant">' +
     '<select class="v-categorie"></select><select class="v-sous"></select>' +
     '<button type="button" class="suppr" aria-label="Supprimer la ligne">×</button>';
@@ -759,7 +762,7 @@ function enregistrerFavori() {
   const designation = $('#designation').value.trim();
   const categorie = $('#categorie').value, sous = $('#sous_categorie').value;
   if (typeCourant === 'VIREMENT' || !categorie || !sous) { toast('Choisis au moins une catégorie et une sous-catégorie.', true); return; }
-  const nom = prompt('Nom du favori :', designation || sous);
+  const nom = majusculesMots(prompt('Nom du favori :', designation || sous) || '');
   if (!nom) return;
   modifier([{ table: 'Favoris', op: 'upsert', data: { id: nouvelId(), nom: nom.trim(), type: typeCourant, designation: designation || sous,
     enseigne: $('#enseigne').value, categorie, sous_categorie: sous, compte: $('#compte').value, paiement: $('#paiement').value, utilisations: 0 } }]);
@@ -769,17 +772,17 @@ function enregistrerFavori() {
 
 function ajouterReference(quoi) {
   if (quoi === 'enseigne') {
-    const nom = (prompt('Nouvelle enseigne :') || '').trim(); if (!nom) return;
+    const nom = majusculesMots((prompt('Nouvelle enseigne :') || '').trim()); if (!nom) return;
     modifier([{ table: 'Enseignes', op: 'upsert', data: { enseigne: nom } }]);
     remplirSelect($('#enseigne'), trierFr(data.Enseignes.map(e => e.enseigne)), '—', nom);
   } else if (quoi === 'categorie') {
-    const nom = (prompt('Nouvelle catégorie :') || '').trim(); if (!nom) return;
-    const sc = (prompt('Première sous-catégorie de « ' + nom + ' » :') || '').trim(); if (!sc) return;
+    const nom = majusculesMots((prompt('Nouvelle catégorie :') || '').trim()); if (!nom) return;
+    const sc = majusculesMots((prompt('Première sous-catégorie de « ' + nom + ' » :') || '').trim()); if (!sc) return;
     modifier([{ table: 'Categories', op: 'upsert', data: { categorie: nom, sous_categorie: sc } }]);
     remplirSelect($('#categorie'), listeCategories(), '— choisir —', nom); chargerSousCategories(sc);
   } else {
     const cat = $('#categorie').value; if (!cat) { toast('Choisis d\'abord une catégorie.', true); return; }
-    const sc = (prompt('Nouvelle sous-catégorie de « ' + cat + ' » :') || '').trim(); if (!sc) return;
+    const sc = majusculesMots((prompt('Nouvelle sous-catégorie de « ' + cat + ' » :') || '').trim()); if (!sc) return;
     modifier([{ table: 'Categories', op: 'upsert', data: { categorie: cat, sous_categorie: sc } }]);
     chargerSousCategories(sc);
   }
@@ -814,7 +817,7 @@ function rendreReglages(erreur) {
     '<span><button type="button" data-renommer="' + esc(f.id) + '">Renommer</button> <button type="button" data-suppr-fav="' + esc(f.id) + '">✕</button></span></div>'
   ).join('') || '<p class="discret">Aucun favori.</p>';
   $$('[data-renommer]').forEach(b => b.onclick = () => {
-    const f = data.Favoris.find(x => x.id === b.dataset.renommer); const nom = (prompt('Nouveau nom :', f.nom) || '').trim();
+    const f = data.Favoris.find(x => x.id === b.dataset.renommer); const nom = majusculesMots((prompt('Nouveau nom :', f.nom) || '').trim());
     if (nom) modifier([{ table: 'Favoris', op: 'upsert', data: { id: f.id, nom } }]);
   });
   $$('[data-suppr-fav]').forEach(b => b.onclick = () => {
@@ -863,10 +866,9 @@ function brancher() {
   $('#designation').onchange = completerDepuisHistorique;
   $('#montant').onblur = () => { try { const v = calculer($('#montant').value); if (v !== null) $('#montant').value = v.toFixed(2).replace('.', ','); } catch (e) { $('#montant').classList.add('invalide'); } };
   $('#plus').onclick = () => { const m = $('#montant'); m.value += '+'; m.focus(); };
-  $$('.raccourcis-date button').forEach(b => b.onclick = () => { $('#date').value = decalerJours(aujourdhui(), Number(b.dataset.jours)); majJourSemaine(); });
+  $('#btnAujourdhui').onclick = () => { $('#date').value = aujourdhui(); };
   $('#jourPlus').onclick = () => changerJour(1);
   $('#jourMoins').onclick = () => changerJour(-1);
-  $('#date').onchange = majJourSemaine;
   $$('.etoile').forEach(b => b.onclick = () => definirDefaut(b.dataset.defaut));
   $$('.ajout').forEach(b => b.onclick = () => ajouterReference(b.dataset.ajout));
   $('#modeVacances').onchange = rendreRaccourcis;
@@ -894,6 +896,7 @@ function brancher() {
     synchroniser();
   };
 
+  document.addEventListener('input', e => { if (e.target.classList && e.target.classList.contains('majuscules')) majusculesChamp(e.target); });
   window.addEventListener('online', synchroniser);
   setInterval(() => { if (outbox.length) synchroniser(); }, 60000);   // filet : réessaie tant qu'il reste des saisies à envoyer
   window.addEventListener('offline', () => majEtatSync());

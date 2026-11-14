@@ -61,22 +61,14 @@
           <button type="button" data-type="VIREMENT">Virement</button>
         </div>
 
-        <div class="date-ventiler">
-          <div class="champ">Date
-            <span class="avec-bouton">
-              <button type="button" id="jourMoins" class="mini" aria-label="Jour précédent">▼</button>
-              <input id="date" type="date">
-              <button type="button" id="jourPlus" class="mini" aria-label="Jour suivant">▲</button>
-            </span>
+        <div class="champ">Date
+          <div class="barre-date">
+            <input id="date" type="date">
+            <button type="button" id="jourMoins" class="mini" aria-label="Jour précédent">▼</button>
+            <button type="button" id="jourPlus" class="mini" aria-label="Jour suivant">▲</button>
+            <button type="button" id="btnAujourdhui" class="aujourdhui">Aujourd'hui</button>
+            <label class="pilule" id="champVentiler"><input type="checkbox" id="ventiler"> Ventiler</label>
           </div>
-          <label class="pilule" id="champVentiler"><input type="checkbox" id="ventiler"> Ventiler</label>
-        </div>
-        <div class="ligne-date">
-          <span id="jourSemaine" class="discret"></span>
-          <span class="raccourcis-date">
-            <button type="button" data-jours="0">Aujourd'hui</button>
-            <button type="button" data-jours="-1">Hier</button>
-          </span>
         </div>
 
         <label class="champ" id="champMontant">Montant
@@ -87,7 +79,7 @@
         </label>
 
         <label class="champ" id="champDesignation">Désignation
-          <input id="designation" list="listeDesignations" placeholder="Ex : Courses Aldi">
+          <input id="designation" autocapitalize="words" class="majuscules" list="listeDesignations" placeholder="Ex : Courses Aldi">
           <datalist id="listeDesignations"></datalist>
         </label>
 
@@ -109,7 +101,7 @@
               <select id="enseigne"></select>
             </label>
             <label class="champ" id="champIntitule" hidden>Intitulé du ticket
-              <input id="intitule" placeholder="Ex : Courses de la semaine">
+              <input id="intitule" autocapitalize="words" class="majuscules" placeholder="Ex : Courses de la semaine">
             </label>
           </div>
           <div class="grille2" id="blocCategorie">
@@ -145,7 +137,7 @@
         </div>
 
         <label class="champ">Commentaire
-          <textarea id="commentaire" rows="2"></textarea>
+          <textarea id="commentaire" rows="2" autocapitalize="words" class="majuscules"></textarea>
         </label>
 
         <label class="interrupteur" id="champPointe"><input type="checkbox" id="pointe"> Pointée</label>

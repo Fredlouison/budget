@@ -223,3 +223,15 @@ body.saisie .fab { display: none; }
 .sous-ops { margin: -4px 0 8px 22px; padding-left: 10px; border-left: 2px solid #c7dbff; }
 .sous-ops .op { margin-bottom: 4px; padding: 6px 8px; }
 .sous-ops .op .t { font-weight: 500; }
+
+/* Ligne de date : date resserrée, flèches, Aujourd'hui, Ventiler */
+.barre-date { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.barre-date input[type=date] { flex: 0 1 auto; width: 120px; min-width: 0; margin: 0; padding: 9px 4px; font-size: 14px; }
+.barre-date .mini { width: 30px; height: 40px; margin: 0; font-size: 12px; flex: 0 0 auto; }
+.barre-date .aujourdhui { flex: 0 0 auto; height: 40px; padding: 0 6px; border: 1px solid #16a34a; background: #dcfce7; color: #166534; border-radius: 10px; font-weight: 700; font-size: 12px; }
+.barre-date .pilule { flex: 0 0 auto; margin: 0 0 0 auto; height: 40px; padding: 0 6px; gap: 4px; font-size: 12px; }
+.barre-date .pilule input { width: 14px; height: 14px; }
+#champMontant { margin-top: 0; }
+
+/* Barre du bas alignée sur la largeur du contenu */
+.onglets { padding-left: max(0px, calc((100% - 736px) / 2)); padding-right: max(0px, calc((100% - 736px) / 2)); }
