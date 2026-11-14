@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.7.0';
+const VERSION_APP = '1.8.0';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -935,6 +935,8 @@ function brancher() {
   $('#designation').onchange = completerDepuisHistorique;
   $('#montant').onblur = () => { try { const v = calculer($('#montant').value); if (v !== null) $('#montant').value = v.toFixed(2).replace('.', ','); } catch (e) { $('#montant').classList.add('invalide'); } };
   $('#plus').onclick = () => { const m = $('#montant'); m.value += '+'; m.focus(); };
+  $('#moins').onclick = () => { const m = $('#montant'); m.value += '-'; m.focus(); };
+  ['#plus', '#moins'].forEach(id => $(id).addEventListener('pointerdown', e => e.preventDefault()));   // le montant garde le focus : pas de reformatage
   $('#btnAujourdhui').onclick = () => { $('#date').value = aujourdhui(); };
   $('#jourPlus').onclick = () => changerJour(1);
   $('#jourMoins').onclick = () => changerJour(-1);
