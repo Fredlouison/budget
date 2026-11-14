@@ -213,3 +213,13 @@ body.saisie .fab { display: none; }
 .modal .choix b { font-variant-numeric: tabular-nums; }
 .modal .secondaire { width: 100%; margin-top: 4px; }
 @media (min-width: 700px) { .modal { align-items: center; } .modal .feuille { border-radius: 16px; } }
+
+/* Enseigne + intitulé côte à côte en ventilation */
+#ligneEnseigne.avec-intitule { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* Dépense ventilée dans le journal */
+.op .picto { display: inline-block; margin-right: 4px; padding: 0 5px; border-radius: 5px; background: #eaf1ff; color: var(--accent); font-size: 12px; font-weight: 800; }
+.op.groupe .lib, .op.groupe .m { cursor: pointer; }
+.sous-ops { margin: -4px 0 8px 22px; padding-left: 10px; border-left: 2px solid #c7dbff; }
+.sous-ops .op { margin-bottom: 4px; padding: 6px 8px; }
+.sous-ops .op .t { font-weight: 500; }

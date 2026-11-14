@@ -4,7 +4,8 @@
  */
 'use strict';
 
-const VERSION_APP = '1.2.1';
+const VERSION_APP = '1.3.0';
+const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
   Operations: ['id'], Series: ['id'], Comptes: ['nom'], Arretes: ['compte', 'annee', 'mois'],
@@ -32,10 +33,12 @@ let vueCourante = 'accueil';
 let moisJournal = null;
 let syncEnCours = false;
 let derniereErreur = '';
+let avertiScript = false;
 let edition = null;   // opération en cours de modification
 let typeCourant = 'DEPENSE';
 let tousFavoris = false;
-let idsSurlignes = new Set();   // lignes à mettre en évidence dans le journal après un enregistrement
+let idsSurlignes = new Set();
+let groupesOuverts = new Set();   // dépenses ventilées dépliées dans le journal   // lignes à mettre en évidence dans le journal après un enregistrement
 
 function videData() {
   const d = {}; Object.keys(CLES).forEach(t => { d[t] = []; }); return d;
@@ -104,11 +107,14 @@ function modifier(mutations) {
 
 async function api(action, charge) {
   if (!config.url || !config.token) throw new Error('Connexion non configurée (onglet Réglages).');
+  const arret = new AbortController();
+  const minuterie = setTimeout(() => arret.abort(), 20000);   // un réseau mobile peut « pendre » : on abandonne au bout de 20 s
   const rep = await fetch(config.url, {
-    method: 'POST', redirect: 'follow',
+    method: 'POST', redirect: 'follow', signal: arret.signal,
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(Object.assign({ token: config.token, action: action }, charge || {}))
   });
+  clearTimeout(minuterie);
   if (!rep.ok) throw new Error('Serveur : HTTP ' + rep.status);
   const json = await rep.json();
   if (!json.ok) throw new Error(json.error || 'Erreur serveur');
@@ -127,6 +133,10 @@ async function synchroniser() {
       ecrire(LS.outbox, outbox);
     }
     const frais = await api('bootstrap');
+    if (String(frais.version || '') < VERSION_SCRIPT_ATTENDUE && !avertiScript) {
+      avertiScript = true;
+      toast('Le script Google doit être mis à jour (version ' + VERSION_SCRIPT_ATTENDUE + ') : voir Réglages.', true);
+    }
     data = frais;
     outbox.forEach(appliquerLocal);       // saisies faites pendant la synchro
     ecrire(LS.data, data);
@@ -135,7 +145,7 @@ async function synchroniser() {
     majEtatSync();
     rendre();
   } catch (e) {
-    derniereErreur = e instanceof TypeError ? 'Pas de réseau' : e.message;
+    derniereErreur = (e instanceof TypeError || e.name === 'AbortError') ? 'Pas de réseau' : e.message;
     majEtatSync(derniereErreur);
     if (vueCourante === 'reglages') rendreReglages(e.message);
   } finally {
@@ -342,13 +352,18 @@ function rendreJournal() {
   ).join('') || '<p class="discret">Aucune dépense.</p>';
 
   const jour = aujourdhui();
-  let html = '', jourCourant = '';
+
+  // Une dépense ventilée = une seule ligne (enseigne + intitulé + total), dépliable.
+  const elements = [], vus = {};
   ops.forEach(o => {
-    if (o.date !== jourCourant) {
-      jourCourant = o.date;
-      const [a, mm, d] = o.date.split('-').map(Number);
-      html += '<div class="jour">' + new Date(a, mm - 1, d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: q ? 'numeric' : undefined }) + '</div>';
-    }
+    if (!o.groupe) { elements.push({ op: o }); return; }
+    if (vus[o.groupe]) return;
+    vus[o.groupe] = true;
+    const enfants = data.Operations.filter(x => x.groupe === o.groupe).sort((a, b) => a.designation.localeCompare(b.designation, 'fr'));
+    elements.push({ groupe: o.groupe, op: o, enfants });
+  });
+
+  const ligneOp = (o, extra) => {
     const v = Number(o.montant) || 0;
     let montantAffiche = v, classe = v < 0 ? 'neg' : 'pos';
     if (o.type === 'VIREMENT') {
@@ -357,15 +372,46 @@ function rendreJournal() {
     }
     const sous = o.type === 'VIREMENT'
       ? 'Virement · ' + esc(o.compte) + ' → ' + esc(o.compte_vers)
-      : esc([o.categorie, o.sous_categorie].filter(Boolean).join(' › ')) + ' · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '');
-    html += '<div class="op' + (!o.pointe && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '">' +
+      : esc([o.categorie, o.sous_categorie].filter(Boolean).join(' › ')) + (extra ? '' : ' · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : ''));
+    return '<div class="op' + (!o.pointe && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '">' +
       '<input type="checkbox" class="coche" ' + (o.pointe ? 'checked' : '') + ' aria-label="Pointée">' +
       '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' 💬' : '') + '</div>' +
       '<div class="s">' + sous + '</div></div>' +
       '<div class="m ' + classe + '">' + euros(montantAffiche) + '</div></div>';
+  };
+
+  let html = '', jourCourant = '';
+  elements.forEach(el => {
+    const o = el.op;
+    if (o.date !== jourCourant) {
+      jourCourant = o.date;
+      const [a, mm, d] = o.date.split('-').map(Number);
+      html += '<div class="jour">' + new Date(a, mm - 1, d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: q ? 'numeric' : undefined }) + '</div>';
+    }
+    if (!el.groupe) { html += ligneOp(o); return; }
+    const total = el.enfants.reduce((t, x) => t + (Number(x.montant) || 0), 0);
+    const toutPointe = el.enfants.every(x => x.pointe);
+    const ouvert = groupesOuverts.has(el.groupe);
+    const titre = [o.enseigne, o.groupe_libelle].filter(Boolean).join(' — ') || 'Dépense ventilée';
+    const surligne = el.enfants.some(x => idsSurlignes.has(x.id));
+    html += '<div class="op groupe' + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '">' +
+      '<input type="checkbox" class="coche" ' + (toutPointe ? 'checked' : '') + ' aria-label="Pointée">' +
+      '<div class="lib"><div class="t"><span class="picto" title="Dépense ventilée">' + (ouvert ? '▾' : '▸') + ' ' + el.enfants.length + '</span>' + esc(titre) + (o.commentaire ? ' 💬' : '') + '</div>' +
+      '<div class="s">Ventilée · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '') + '</div></div>' +
+      '<div class="m ' + (total < 0 ? 'neg' : 'pos') + '">' + euros(total) + '</div></div>';
+    if (ouvert) html += '<div class="sous-ops">' + el.enfants.map(x => ligneOp(x, true)).join('') + '</div>';
   });
   $('#listeOps').innerHTML = html || '<p class="discret">Aucune opération.</p>';
-  $$('#listeOps .op').forEach(el => {
+  $$('#listeOps .op.groupe').forEach(el => {
+    const g = el.dataset.groupe;
+    $('.coche', el).onchange = e => modifier(data.Operations.filter(o => o.groupe === g)
+      .map(o => ({ table: 'Operations', op: 'upsert', data: { id: o.id, pointe: e.target.checked } })));
+    $('.lib', el).onclick = $('.m', el).onclick = () => {
+      if (groupesOuverts.has(g)) groupesOuverts.delete(g); else groupesOuverts.add(g);
+      rendreJournal();
+    };
+  });
+  $$('#listeOps .op:not(.groupe)').forEach(el => {
     const id = el.dataset.id;
     $('.coche', el).onchange = e => modifier([{ table: 'Operations', op: 'upsert', data: { id, pointe: e.target.checked } }]);
     $('.lib', el).onclick = $('.m', el).onclick = () => ouvrirFormulaire({ op: data.Operations.find(o => o.id === id) });
@@ -530,6 +576,8 @@ function completerDepuisHistorique() {
 
 function basculerVentilation() {
   const on = $('#ventiler').checked;
+  $('#champIntitule').hidden = !on;
+  $('#ligneEnseigne').classList.toggle('avec-intitule', on);
   $('#blocVentilation').hidden = !on;
   $('#blocCategorie').hidden = on;
   $('#champMontant').hidden = on;
@@ -551,6 +599,11 @@ function ajouterLigneVentilation() {
   remplirSelect($('.v-sous', div), [], 'Sous-catégorie', '');
   $('.v-categorie', div).onchange = () => remplirSelect($('.v-sous', div), listeSousCategories($('.v-categorie', div).value), 'Sous-catégorie', '');
   $('.v-montant', div).oninput = majTotalVentilation;
+  $('.v-montant', div).onblur = e => {   // affiche le résultat du calcul en sortant du champ
+    try { const v = calculer(e.target.value); if (v !== null) e.target.value = v.toFixed(2).replace('.', ','); e.target.classList.remove('invalide'); }
+    catch (err) { e.target.classList.add('invalide'); }
+    majTotalVentilation();
+  };
   $('.suppr', div).onclick = () => { div.remove(); majTotalVentilation(); };
 }
 
@@ -606,12 +659,15 @@ function enregistrer(ev) {
     const lignes = lignesVentilation();
     if (!lignes.length) { err.textContent = 'Ajoute au moins une ligne.'; return; }
     const ops = [];
+    const groupe = 'G-' + nouvelId();
+    const intitule = $('#intitule').value.trim();
     lignes.forEach(l => {
       let v = null; try { v = calculer(l.montantTexte); } catch (e) { /* invalide */ }
       ok &= marquer($('.v-designation', l.div), !!l.designation) & marquer($('.v-categorie', l.div), !!l.categorie) &
         marquer($('.v-sous', l.div), !!l.sous_categorie) & marquer($('.v-montant', l.div), v > 0);
       ops.push(Object.assign({ id: nouvelId() }, commun, { designation: l.designation, categorie: l.categorie,
-        sous_categorie: l.sous_categorie, montant: signe(v || 0), pointe: false, serie_id: '', source: 'appli' }));
+        sous_categorie: l.sous_categorie, montant: signe(v || 0), pointe: false, serie_id: '', source: 'appli',
+        groupe, groupe_libelle: intitule }));
     });
     if (!ok) { err.textContent = 'Complète les champs en rouge.'; return; }
     modifier(ops.map(o => ({ table: 'Operations', op: 'upsert', data: o })));
@@ -751,6 +807,7 @@ function rendreReglages(erreur) {
   if (local.derniereSync) info.push('Dernière synchro : ' + new Date(local.derniereSync).toLocaleString('fr-FR'));
   if (outbox.length) info.push(outbox.length + ' modification(s) en attente d\'envoi');
   if (erreur) info.push('⚠ ' + erreur);
+  if (data.version && String(data.version) < VERSION_SCRIPT_ATTENDUE) info.push('⚠ Script Google en version ' + data.version + ' : à mettre à jour en ' + VERSION_SCRIPT_ATTENDUE);
   $('#infoSync').textContent = info.join(' · ') || 'Jamais synchronisé.';
   const suiv = new Date().getFullYear() + 1;
   $('#btnAnneeSuivante').textContent = param('annee_generee_' + suiv) ? 'Échéances ' + suiv + ' déjà préparées ✓' : 'Préparer les échéances ' + suiv;

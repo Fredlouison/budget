@@ -104,9 +104,14 @@
         </div>
 
         <div id="blocClassement">
-          <label class="champ">Enseigne <button type="button" class="ajout" data-ajout="enseigne">+</button>
-            <select id="enseigne"></select>
-          </label>
+          <div id="ligneEnseigne">
+            <label class="champ">Enseigne <button type="button" class="ajout" data-ajout="enseigne">+</button>
+              <select id="enseigne"></select>
+            </label>
+            <label class="champ" id="champIntitule" hidden>Intitulé du ticket
+              <input id="intitule" placeholder="Ex : Courses de la semaine">
+            </label>
+          </div>
           <div class="grille2" id="blocCategorie">
             <label class="champ">Catégorie <button type="button" class="ajout" data-ajout="categorie">+</button>
               <select id="categorie"></select>
