@@ -254,3 +254,8 @@ details.carte[open] > summary { margin-bottom: 8px; }
 .barre-date .mini, .barre-date .aujourdhui, .barre-date .pilule { height: 44px; }
 .bloc-montant .mini { height: 44px; }
 .barre-date .aujourdhui { padding: 0 2px; }
+
+/* + et − empilés à droite du montant */
+.plus-moins { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; flex: 0 0 34px; }
+.plus-moins button { height: 21px; padding: 0; border: 1px solid var(--bord); border-radius: 6px; background: #fff; font-size: 15px; line-height: 1; }
+.bloc-montant { flex: 1 1 150px; }

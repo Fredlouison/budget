@@ -63,13 +63,6 @@
         </div>
 
         <div class="ligne-montant-date">
-          <label class="champ bloc-montant" id="champMontant">Montant
-            <span class="avec-bouton">
-              <input id="montant" inputmode="decimal" placeholder="0,00">
-              <button type="button" id="plus" class="mini" aria-label="Ajouter +">+</button>
-              <button type="button" id="moins" class="mini" aria-label="Ajouter −">−</button>
-            </span>
-          </label>
           <div class="champ bloc-date">Date
             <div class="barre-date">
               <input id="date" type="date">
@@ -79,6 +72,15 @@
               <label class="pilule" id="champVentiler"><input type="checkbox" id="ventiler"> Ventiler</label>
             </div>
           </div>
+          <label class="champ bloc-montant" id="champMontant">Montant
+            <span class="avec-bouton">
+              <input id="montant" inputmode="decimal" placeholder="0,00">
+              <span class="plus-moins">
+                <button type="button" id="plus" aria-label="Ajouter +">+</button>
+                <button type="button" id="moins" aria-label="Ajouter −">−</button>
+              </span>
+            </span>
+          </label>
         </div>
 
         <label class="champ" id="champDesignation">Désignation
