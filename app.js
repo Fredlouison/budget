@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.8.1';
+const VERSION_APP = '1.8.2';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -594,7 +594,10 @@ function basculerVentilation() {
   $('#champMontant').hidden = on;
   $('#champDesignation').hidden = on;
   $('#champFrequence').hidden = on;
-  if (on && !$('#lignesVentilation').children.length) { ajouterLigneVentilation(); ajouterLigneVentilation(); }
+  if (on && !$('#lignesVentilation').children.length) {
+    const premiere = ajouterLigneVentilation(); ajouterLigneVentilation();
+    $('.v-designation', premiere).focus();
+  }
   majTotalVentilation();
 }
 
@@ -611,6 +614,7 @@ function ajouterLigneVentilation() {
   $('.v-categorie', div).onchange = () => remplirSelect($('.v-sous', div), listeSousCategories($('.v-categorie', div).value), 'Sous-catégorie', '');
   $('.v-montant', div).oninput = majTotalVentilation;
   $('.suppr', div).onclick = () => { div.remove(); majTotalVentilation(); };
+  return div;
 }
 
 function lignesVentilation() {
@@ -946,7 +950,7 @@ function brancher() {
   $('#btnFavoris').onclick = () => { favorisOuverts = !favorisOuverts; rendreRaccourcis(); };
   $('#lieuVacances').oninput = e => { e.target.value = e.target.value.toUpperCase(); };
   $('#ventiler').onchange = basculerVentilation;
-  $('#ajoutLigne').onclick = ajouterLigneVentilation;
+  $('#ajoutLigne').onclick = () => $('.v-designation', ajouterLigneVentilation()).focus();   // curseur dans la désignation de la nouvelle ligne
   $('#formulaire').onsubmit = enregistrer;
   $('#btnAnnuler').onclick = () => { const r = edition ? 'journal' : 'accueil'; edition = null; afficherVue(r); };
   $('#btnSupprimer').onclick = supprimerOperation;
