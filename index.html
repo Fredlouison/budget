@@ -66,6 +66,10 @@
           <div class="champ bloc-date">Date
             <div class="barre-date">
               <input id="date" type="date">
+              <span class="date-pc">
+                <input id="dateTexte" autocomplete="off" placeholder="jj/mm/aa">
+                <button type="button" id="btnCalendrier" class="calendrier" aria-label="Calendrier">📅</button>
+              </span>
               <button type="button" id="jourMoins" class="mini" aria-label="Jour précédent">▼</button>
               <button type="button" id="jourPlus" class="mini" aria-label="Jour suivant">▲</button>
               <button type="button" id="btnAujourdhui" class="aujourdhui">Aujourd'hui</button>
@@ -198,7 +202,7 @@
 
   <div id="choixCompte" class="modal" hidden>
     <div class="feuille">
-      <h2>Afficher quel compte ?</h2>
+      <h2 id="titreChoix">Afficher quel compte ?</h2>
       <div id="listeChoixComptes"></div>
       <button type="button" class="secondaire" id="fermerChoix">Annuler</button>
     </div>

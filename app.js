@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.9.0';
+const VERSION_APP = '1.11.0';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -251,9 +251,14 @@ function rendreAccueil() {
   }
   const comptes = data.Comptes.filter(c => c.actif !== false).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
   const calcules = comptes.map(c => ({ c, s: soldesCompte(c, jour) }));
-  const total = calcules.reduce((t, x) => t + x.s.aujourdhui, 0);
-  $('#total').innerHTML = '<div><div class="discret">Total aujourd\'hui</div><div class="montant-grand ' + (total < 0 ? 'neg' : '') + '">' +
-    euros(total) + '</div></div><div class="discret" style="text-align:right">' + new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) + '</div>';
+  // Comptes totalisés : choix mémorisé (par défaut, tous).
+  const choixTotal = Array.isArray(local.comptesTotal) ? local.comptesTotal : null;
+  const total = calcules.filter(x => !choixTotal || choixTotal.indexOf(x.c.nom) !== -1).reduce((t, x) => t + x.s.aujourdhui, 0);
+  $('#total').innerHTML = '<span class="discret lib-total">Total aujourd\'hui</span>' +
+    '<span class="montant-grand ' + (total < 0 ? 'neg' : '') + '">' + euros(total) + '</span>' +
+    '<span class="discret date-total"><span class="date-longue">' + new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) +
+    '</span><span class="date-courte">' + new Date().toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }) + '</span></span>';
+  $('#total').onclick = ouvrirChoixTotal;
 
   const nomMoisSuiv = MOIS[new Date().getMonth() === 11 ? 0 : new Date().getMonth() + 1];
   const carte = ({ c, s }) =>
@@ -305,9 +310,29 @@ function rendreTuiles() {
   $$('#tuilesPointage .tuile').forEach(t => t.onclick = () => ouvrirChoixCompte(Number(t.dataset.index)));
 }
 
+/** Fenêtre de choix des comptes additionnés dans la tuile Total (cases à cocher). */
+function ouvrirChoixTotal() {
+  const jour = aujourdhui();
+  const comptes = data.Comptes.filter(c => c.actif !== false).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+  const choix = Array.isArray(local.comptesTotal) ? local.comptesTotal : comptes.map(c => c.nom);
+  $('#titreChoix').textContent = 'Comptes à totaliser';
+  $('#fermerChoix').textContent = 'OK';
+  $('#listeChoixComptes').innerHTML = comptes.map(c =>
+    '<label class="choix coche"><input type="checkbox" value="' + esc(c.nom) + '"' + (choix.indexOf(c.nom) !== -1 ? ' checked' : '') + '>' +
+    '<span>' + esc(c.nom) + '</span><b>' + euros(soldesCompte(c, jour).aujourdhui) + '</b></label>').join('');
+  $$('#listeChoixComptes input').forEach(cb => cb.onchange = () => {
+    local.comptesTotal = $$('#listeChoixComptes input').filter(x => x.checked).map(x => x.value);
+    ecrire(LS.local, local);
+    rendreAccueil();
+  });
+  $('#choixCompte').hidden = false;
+}
+
 /** Fenêtre de choix du compte d'une tuile. cle = 'tuiles' (journal) ou 'tuilesAccueil'. */
 function ouvrirChoixCompte(index, cle, nombre) {
   cle = cle || 'tuiles'; nombre = nombre || 3;
+  $('#titreChoix').textContent = 'Afficher quel compte ?';
+  $('#fermerChoix').textContent = 'Annuler';
   const actuels = comptesTuiles(cle, nombre), jour = aujourdhui();
   const valeur = c => { const s = soldesCompte(c, jour); return cle === 'tuiles' ? s.pointeTotal : s.aujourdhui; };
   const comptes = data.Comptes.slice().sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
@@ -467,8 +492,53 @@ function majEtoiles() {
   });
 }
 
+/** « 05 novembre 2026 » */
+function dateEnLettres(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  return pad(d) + ' ' + MOIS[m - 1] + ' ' + y;
+}
+
+/** Lit une date tapée : 5/11/26, 5/11, 5-11-2026, 5.11.26, 051126, 5 nov 26, 05 novembre 2026… → 'yyyy-mm-dd' (ou null). */
+function lireDateTapee(texte) {
+  const t = String(texte || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (!t) return null;
+  const anneeCourante = new Date().getFullYear();
+  let j, m, a;
+  let r = t.match(/^(\d{1,2})[\/\-. ](\d{1,2})(?:[\/\-. ](\d{2}|\d{4}))?$/);
+  if (r) { j = +r[1]; m = +r[2]; a = r[3]; }
+  if (!r && (r = t.match(/^(\d{2})(\d{2})(\d{2}|\d{4})?$/))) { j = +r[1]; m = +r[2]; a = r[3]; }
+  if (!r && (r = t.match(/^(\d{1,2})\s*([a-z]+)\.?(?:\s+(\d{2}|\d{4}))?$/))) {
+    const sansAccents = MOIS.map(x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+    const i = sansAccents.findIndex(x => x.startsWith(r[2].slice(0, Math.max(3, Math.min(r[2].length, 4)))) || x === r[2]);
+    if (i === -1) return null;
+    j = +r[1]; m = i + 1; a = r[3];
+  }
+  if (!j || !m) return null;
+  a = a === undefined ? anneeCourante : (String(a).length === 2 ? 2000 + Number(a) : Number(a));
+  if (m < 1 || m > 12 || j < 1 || j > joursDansMois(a, m)) return null;
+  return ymd(a, m, j);
+}
+
+function majDateTexte() {
+  const champ = $('#dateTexte');
+  if (champ && document.activeElement !== champ) champ.value = dateEnLettres($('#date').value);
+  if (champ) champ.classList.remove('invalide');
+}
+
+function validerDateTexte() {
+  const champ = $('#dateTexte');
+  if (!champ.value.trim()) { majDateTexte(); return; }
+  const iso = lireDateTapee(champ.value);
+  if (!iso) { champ.classList.add('invalide'); return; }
+  $('#date').value = iso;
+  champ.value = dateEnLettres(iso);
+  champ.classList.remove('invalide');
+}
+
 function changerJour(n) {
   $('#date').value = decalerJours($('#date').value || aujourdhui(), n);
+  majDateTexte();
 }
 
 function dateParDefaut() {
@@ -521,8 +591,12 @@ function ouvrirFormulaire(opts) {
     rendreRaccourcis();
   }
   majEtoiles();
+  majDateTexte();
   afficherVue('saisie');
-  if (!edition) setTimeout(() => $('#montant').focus(), 50);
+  if (!edition) setTimeout(() => {   // curseur dans le montant, sauf si un champ a déjà été touché
+    const actif = document.activeElement;
+    if (!actif || actif === document.body || !$('#formulaire').contains(actif)) $('#montant').focus();
+  }, 50);
 }
 
 function rendreRaccourcis() {
@@ -679,6 +753,7 @@ function enregistrer(ev) {
   const err = $('#erreurForm'); err.textContent = '';
   $$('#formulaire .invalide').forEach(x => x.classList.remove('invalide'));
   manquants = [];
+  if (document.activeElement === $('#dateTexte')) validerDateTexte();
   const type = typeCourant;
   const date = $('#date').value;
   const compte = $('#compte').value;
@@ -941,7 +1016,12 @@ function brancher() {
   $('#plus').onclick = () => { const m = $('#montant'); m.value += '+'; m.focus(); };
   $('#moins').onclick = () => { const m = $('#montant'); m.value += '-'; m.focus(); };
   ['#plus', '#moins'].forEach(id => $(id).addEventListener('pointerdown', e => e.preventDefault()));   // le montant garde le focus : pas de reformatage
-  $('#btnAujourdhui').onclick = () => { $('#date').value = aujourdhui(); };
+  $('#btnAujourdhui').onclick = () => { $('#date').value = aujourdhui(); majDateTexte(); };
+  $('#date').addEventListener('change', majDateTexte);
+  $('#dateTexte').addEventListener('blur', validerDateTexte);
+  $('#dateTexte').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); validerDateTexte(); $('#dateTexte').select(); } });
+  $('#dateTexte').addEventListener('focus', () => $('#dateTexte').select());
+  $('#btnCalendrier').onclick = () => { try { $('#date').showPicker(); } catch (e) { $('#date').focus(); } };
   $('#jourPlus').onclick = () => changerJour(1);
   $('#jourMoins').onclick = () => changerJour(-1);
   $$('.etoile').forEach(b => b.onclick = () => definirDefaut(b.dataset.defaut));
