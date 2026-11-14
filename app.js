@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.12.0';
+const VERSION_APP = '1.13.0';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -285,7 +285,7 @@ function rendreAccueil() {
 /** Comptes affichés en tuiles (journal : 3, accueil : 4) : choix mémorisé, sinon les plus utilisés ces 3 derniers mois. */
 function comptesTuiles(cle, nombre) {
   cle = cle || 'tuiles'; nombre = nombre || 3;
-  const noms = data.Comptes.map(c => c.nom);
+  const noms = data.Comptes.filter(c => c.actif !== false).map(c => c.nom);
   const choix = (local[cle] || []).filter(n => noms.indexOf(n) !== -1).slice(0, nombre);
   if (choix.length === nombre) return choix;
   const depuis = decalerJours(aujourdhui(), -92), usage = {};
@@ -335,7 +335,7 @@ function ouvrirChoixCompte(index, cle, nombre) {
   $('#fermerChoix').textContent = 'Annuler';
   const actuels = comptesTuiles(cle, nombre), jour = aujourdhui();
   const valeur = c => { const s = soldesCompte(c, jour); return cle === 'tuiles' ? s.pointeTotal : s.aujourdhui; };
-  const comptes = data.Comptes.slice().sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+  const comptes = data.Comptes.filter(c => c.actif !== false).sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
   $('#listeChoixComptes').innerHTML = comptes.map(c =>
     '<button type="button" class="choix' + (c.nom === actuels[index] ? ' courant' : '') + '" data-nom="' + esc(c.nom) + '">' +
     '<span>' + esc(c.nom) + '</span><b>' + euros(valeur(c)) + '</b></button>').join('');
@@ -966,6 +966,14 @@ function rendreReglages(erreur) {
   $('#btnAnneeSuivante').disabled = !!param('annee_generee_' + suiv);
   $('#version').textContent = 'Version ' + VERSION_APP;
 
+  const jourR = aujourdhui();
+  $('#listeComptesReglages').innerHTML = data.Comptes.slice().sort((a, b) => (a.ordre || 0) - (b.ordre || 0)).map(c =>
+    '<div class="item' + (c.actif === false ? ' inactif' : '') + '"><span>' + esc(c.nom) + (c.actif === false ? ' (désactivé)' : '') +
+    '<span class="sous">Départ ' + euros(c.solde_initial) + (c.date_solde ? ' au ' + c.date_solde.split('-').reverse().join('/') : '') +
+    ' · aujourd\'hui ' + euros(soldesCompte(c, jourR).aujourdhui) + '</span></span>' +
+    '<button type="button" data-fiche="' + esc(c.nom) + '">Modifier</button></div>').join('') || '<p class="discret">Aucun compte.</p>';
+  $$('[data-fiche]').forEach(b => b.onclick = () => ouvrirFicheCompte(b.dataset.fiche));
+
   $('#listeFavoris').innerHTML = data.Favoris.slice().sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr')).map(f =>
     '<div class="item"><span>' + esc(f.nom) + '<span class="sous">' + esc([f.categorie, f.sous_categorie, f.compte].filter(Boolean).join(' › ')) + '</span></span>' +
     '<span><button type="button" data-renommer="' + esc(f.id) + '">Renommer</button> <button type="button" data-suppr-fav="' + esc(f.id) + '">✕</button></span></div>'
@@ -992,6 +1000,55 @@ function rendreReglages(erreur) {
 }
 
 
+/* ================= Comptes (ajout, modification, désactivation, suppression) ================= */
+
+let compteEdite = null;
+
+function ouvrirFicheCompte(nom) {
+  compteEdite = nom ? data.Comptes.find(c => c.nom === nom) : null;
+  const c = compteEdite;
+  $('#titreFicheCompte').textContent = c ? 'Modifier « ' + c.nom + ' »' : 'Nouveau compte';
+  $('#fcNom').value = c ? c.nom : '';
+  $('#fcNom').disabled = !!c;                        // renommer changerait toutes les opérations : non prévu
+  $('#fcSolde').value = c ? String(Number(c.solde_initial) || 0).replace('.', ',') : '';
+  $('#fcDate').value = c ? (c.date_solde || '') : decalerJours(aujourdhui(), -1);
+  $('#fcActif').checked = c ? c.actif !== false : true;
+  $('#fcErreur').textContent = '';
+  $('#fcSupprimer').hidden = !c;
+  $('#ficheCompte').hidden = false;
+  if (!c) setTimeout(() => $('#fcNom').focus(), 50);
+}
+
+function utilisationsCompte(nom) {
+  return data.Operations.filter(o => o.compte === nom || o.compte_vers === nom).length +
+    data.Series.filter(x => x.compte === nom || x.compte_vers === nom).length;
+}
+
+function enregistrerFicheCompte() {
+  const err = $('#fcErreur');
+  const nom = compteEdite ? compteEdite.nom : majusculesMots($('#fcNom').value.trim());
+  if (!nom) { err.textContent = 'Donne un nom au compte.'; return; }
+  if (!compteEdite && data.Comptes.some(c => c.nom.toLowerCase() === nom.toLowerCase())) { err.textContent = 'Ce compte existe déjà.'; return; }
+  let solde;
+  try { solde = calculer($('#fcSolde').value); } catch (e) { err.textContent = 'Solde invalide.'; return; }
+  if (!$('#fcDate').value) { err.textContent = 'Indique la date du solde de départ.'; return; }
+  const ordre = compteEdite ? compteEdite.ordre : Math.max(0, ...data.Comptes.map(c => Number(c.ordre) || 0)) + 1;
+  modifier([{ table: 'Comptes', op: 'upsert', data: { nom, solde_initial: solde || 0, date_solde: $('#fcDate').value, ordre, actif: $('#fcActif').checked } }]);
+  $('#ficheCompte').hidden = true;
+  toast(compteEdite ? 'Compte modifié' : 'Compte ajouté');
+}
+
+function supprimerFicheCompte() {
+  const c = compteEdite; if (!c) return;
+  const n = utilisationsCompte(c.nom);
+  if (n) { $('#fcErreur').textContent = n + ' opération(s) utilisent ce compte : il ne peut pas être supprimé. Décoche « Compte actif » pour le masquer.'; return; }
+  if (!confirm('Supprimer définitivement le compte « ' + c.nom + ' » ?')) return;
+  modifier([{ table: 'Comptes', op: 'delete', data: { nom: c.nom } }]);
+  $('#ficheCompte').hidden = true;
+  toast('Compte supprimé');
+}
+
+
 /* ================= Démarrage ================= */
 
 function brancher() {
@@ -1000,6 +1057,10 @@ function brancher() {
     if (b.dataset.vue === 'saisie') ouvrirFormulaire(); else afficherVue(b.dataset.vue);
   });
   $('#fermerChoix').onclick = () => { $('#choixCompte').hidden = true; };
+  $('#btnAjoutCompte').onclick = () => ouvrirFicheCompte(null);
+  $('#fcEnregistrer').onclick = enregistrerFicheCompte;
+  $('#fcAnnuler').onclick = () => { $('#ficheCompte').hidden = true; };
+  $('#fcSupprimer').onclick = supprimerFicheCompte;
   $('#choixCompte').onclick = e => { if (e.target.id === 'choixCompte') $('#choixCompte').hidden = true; };
   $('#etatSync').onclick = () => synchroniser();
   $('#moisPrec').onclick = () => { let [y, m] = moisJournal; m--; if (!m) { m = 12; y--; } moisJournal = [y, m]; rendreJournal(); };
