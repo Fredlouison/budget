@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.16.0';
+const VERSION_APP = '1.17.0';
 const VERSION_SCRIPT_ATTENDUE = '2.2.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -75,8 +75,9 @@ function fondCompte(nom) {
   const c = couleurCompte(nom);
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c);
   if (!m) return '';
-  const clair = h => Math.round(255 - (255 - parseInt(h, 16)) * 0.12);   // 12 % de la couleur sur fond blanc
-  return 'rgb(' + clair(m[1]) + ',' + clair(m[2]) + ',' + clair(m[3]) + ')';
+  const base = [18, 21, 25];   // couleur des cartes (thème sombre)
+  const teinte = (h, i) => Math.round(base[i] + (parseInt(h, 16) - base[i]) * 0.12);   // 12 % de la couleur sur la carte
+  return 'rgb(' + teinte(m[1], 0) + ',' + teinte(m[2], 1) + ',' + teinte(m[3], 2) + ')';
 }
 
 /** Première lettre de chaque mot en majuscule (le reste est laissé tel quel). */
@@ -435,7 +436,7 @@ function rendreJournal() {
       : esc([o.categorie, o.sous_categorie].filter(Boolean).join(' › ')) + (extra ? '' : ' · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : ''));
     const vir = o.type === 'VIREMENT';
     let fond = fondCompte(o.compte);
-    if (vir && (fond || fondCompte(o.compte_vers))) fond = 'linear-gradient(90deg,' + (fond || '#fff') + ',' + (fondCompte(o.compte_vers) || '#fff') + ')';
+    if (vir && (fond || fondCompte(o.compte_vers))) fond = 'linear-gradient(90deg,' + (fond || 'var(--carte)') + ',' + (fondCompte(o.compte_vers) || 'var(--carte)') + ')';
     const cases = vir
       ? '<span class="coches"><input type="checkbox" class="coche" data-cote="depart" ' + (o.pointe ? 'checked' : '') + styleCase(o.compte) + ' title="Pointé sur ' + esc(o.compte) + '" aria-label="Pointé sur ' + esc(o.compte) + '">' +
         '<input type="checkbox" class="coche" data-cote="arrivee" ' + (estPointeVers(o) ? 'checked' : '') + styleCase(o.compte_vers) + ' title="Pointé sur ' + esc(o.compte_vers) + '" aria-label="Pointé sur ' + esc(o.compte_vers) + '"></span>'

@@ -1,6 +1,6 @@
 [hidden] { display: none !important; }
 :root {
-  --fond: #000000;
+  --fond: #f2f4f7;
   --carte: #ffffff;
   --texte: #14202b;
   --discret: #667085;
@@ -326,11 +326,89 @@ details.carte[open] > summary { margin-bottom: 8px; }
 .op .coches { display: flex; flex-direction: column; gap: 4px; align-items: center; }
 .op .coches .coche { width: 21px; height: 21px; }
 
-/* Fond noir : textes posés directement sur le fond en clair (ceux des cartes restent foncés) */
-body { color-scheme: light; }
-.vue > .champ, #formulaire > .champ, #formulaire .grille2 > .champ, #formulaire .ligne-montant-date .champ,
-#formulaire #blocClassement .champ, #formulaire > div > .champ, #formulaire .interrupteur, .ligne-raccourcis .interrupteur,
-.jour, .resume, .nav-mois strong, details.autres > summary, .pied-ventilation strong, #vue-saisie .vide { color: #e5e7eb; }
-.resume b.neg, #formulaire > .erreur { color: #f87171 !important; }
-.resume b.pos { color: #4ade80 !important; }
-.etoile { color: #cbd5e1; }
+
+/* ================= Thème sombre « vert flash » ================= */
+:root {
+  --fond: #000000;
+  --carte: #121519;
+  --carte2: #1a1f25;
+  --bord: #2a3038;
+  --texte: #e8eaed;
+  --discret: #8b949e;
+  --principal: #00ff7f;
+  --accent: #00ff7f;
+  --rouge: #ff4d6d;
+  --vert: #00ff7f;
+  --jaune: #ffd60a;
+}
+body { color-scheme: dark; background: var(--fond); color: var(--texte); }
+.barre { background: #000; border-bottom: 1px solid #1d2a22; }
+.barre h1 { color: var(--vert); letter-spacing: .3px; }
+.carte, .tuile, .op, .item, .modal .feuille, .ligne-ventilation, .puces button, .bouton-favoris, .pilule,
+.nav-mois button, .mini, .plus-moins button, .modal .choix { background: var(--carte); color: var(--texte); border-color: var(--bord); }
+.op.prevue { background: #0d1013; }
+.champ { color: #c9d1d9; }
+.champ input, .champ select, .champ textarea, .filtres select, .filtres input, .lieu, .ligne-ventilation input, .ligne-ventilation select,
+.date-pc input, .barre-date input[type=date] { background: #0b0d10; color: var(--texte); border-color: var(--bord); }
+.champ input:focus, .champ select:focus, .champ textarea:focus, .date-pc input:focus { outline: 2px solid rgba(0,255,127,.35); border-color: var(--vert); }
+::placeholder { color: #5b636d; }
+.discret, .details-solde div, .jour, .tuile .n, .tuile .p, .op .lib .s { color: var(--discret); }
+.details-solde b, .resume b { color: var(--texte); }
+.neg { color: var(--rouge) !important; }
+.pos { color: var(--vert) !important; }
+.invalide, .champ .invalide { border-color: var(--rouge) !important; background: #2a0d14 !important; }
+.erreur { color: var(--rouge); }
+
+/* Boutons */
+button.principal { background: var(--vert); color: #000; box-shadow: 0 0 14px rgba(0,255,127,.35); }
+button.secondaire { background: var(--carte2); color: var(--texte); border: 1px solid var(--bord); }
+button.lien { color: var(--vert); }
+button.lien.danger { color: var(--rouge); }
+.segment { background: var(--carte2); }
+.segment button { color: var(--discret); }
+.segment button.actif { background: var(--vert); color: #000 !important; box-shadow: 0 0 10px rgba(0,255,127,.4); }
+.barre-date .aujourdhui, .raccourcis-date button { background: transparent; border-color: var(--vert); color: var(--vert); }
+.pilule:has(input:checked) { border-color: var(--vert); background: rgba(0,255,127,.12); color: var(--vert); }
+.bouton-favoris.actif { border-color: var(--vert); background: rgba(0,255,127,.12); color: var(--vert); }
+.puces button { border-color: var(--bord); }
+.puces button:active { background: var(--carte2); }
+.etoile { color: var(--discret); }
+.etoile.actif { color: var(--jaune); }
+.champ select.defaut { background: #221d05; border-color: #b39400; }
+.ajout { background: var(--rouge); }
+.interrupteur input, .pilule input, .modal .choix.coche input { accent-color: var(--vert); }
+#fcSansCouleur.actif { outline-color: var(--vert); }
+
+/* Soldes, tuiles, journal */
+.compte-carte .nom { color: var(--texte); }
+.tuiles { background: var(--fond); border-bottom-color: #1d2a22; }
+.tuile.maj { animation: flash-vert 0.8s ease-out; }
+@keyframes flash-vert { 50% { box-shadow: 0 0 14px rgba(0,255,127,.6); } }
+.op .coche { accent-color: var(--vert); }
+.op.surligne { border: 2px solid var(--vert); background: rgba(0,255,127,.08); animation: none; box-shadow: 0 0 12px rgba(0,255,127,.35); }
+.op .picto { background: rgba(0,255,127,.12); color: var(--vert); }
+.sous-ops { border-left-color: rgba(0,255,127,.35); }
+.barre-cat .jauge { background: var(--carte2); }
+.barre-cat .jauge i { background: var(--vert); box-shadow: 0 0 6px rgba(0,255,127,.6); }
+.modal { background: rgba(0,0,0,.7); }
+.modal .choix.courant { border-color: var(--vert); background: rgba(0,255,127,.1); }
+.item { border-bottom-color: var(--bord); }
+.item button { background: var(--carte2); color: var(--texte); border-color: var(--bord); }
+
+/* Navigation */
+.onglets { background: #07090b; border-top-color: #1d2a22; }
+.onglets button { color: var(--discret); }
+.onglets button.actif { color: var(--vert); }
+.onglets button.saisir { color: var(--vert); }
+.onglets button.saisir span { background: var(--vert); color: #000; box-shadow: 0 0 14px rgba(0,255,127,.55); }
+.onglets button.saisir.actif span { background: var(--vert); }
+.etat-sync.ok { color: var(--vert); }
+.toast { background: #0b0d10; color: var(--texte); border: 1px solid var(--vert); }
+.toast.erreur { background: #2a0d14; border-color: var(--rouge); }
+
+/* Ligne Vacances / Favoris : plus basse, espacée du sélecteur de type */
+.ligne-raccourcis { margin-bottom: 12px; align-items: center; }
+.ligne-raccourcis .bouton-favoris { padding: 4px 12px; height: 32px; font-size: 13px; line-height: 1; }
+.ligne-raccourcis .lieu { height: 32px; padding: 4px 10px; font-size: 14px; }
+.ligne-raccourcis .interrupteur input { width: 18px; height: 18px; }
+#favoris:not([hidden]) { margin-top: 0; }
