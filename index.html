@@ -29,6 +29,7 @@
 
     <!-- JOURNAL -->
     <section id="vue-journal" class="vue" hidden>
+      <div id="tuilesPointage" class="tuiles"></div>
       <div class="nav-mois">
         <button type="button" id="moisPrec" aria-label="Mois précédent">‹</button>
         <strong id="moisLibelle"></strong>
@@ -187,13 +188,20 @@
     </section>
   </main>
 
-  <button id="fab" class="fab" type="button" aria-label="Nouvelle opération">+</button>
-
   <nav class="onglets">
+    <button type="button" data-vue="saisie" class="saisir"><span>+</span>Saisir</button>
     <button type="button" data-vue="accueil" class="actif"><span>◉</span>Soldes</button>
     <button type="button" data-vue="journal"><span>☰</span>Journal</button>
     <button type="button" data-vue="reglages"><span>⚙</span>Réglages</button>
   </nav>
+
+  <div id="choixCompte" class="modal" hidden>
+    <div class="feuille">
+      <h2>Afficher quel compte ?</h2>
+      <div id="listeChoixComptes"></div>
+      <button type="button" class="secondaire" id="fermerChoix">Annuler</button>
+    </div>
+  </div>
 
   <div id="toast" class="toast" hidden></div>
 

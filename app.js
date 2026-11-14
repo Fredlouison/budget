@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.1.0';
+const VERSION_APP = '1.2.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
   Operations: ['id'], Series: ['id'], Comptes: ['nom'], Arretes: ['compte', 'annee', 'mois'],
@@ -174,7 +174,7 @@ function soldesCompte(c, jour) {
   const debutSuiv = ymd(ym1[0], ym1[1], 1), finSuiv = ymd(ym1[0], ym1[1], joursDansMois(ym1[0], ym1[1]));
   const depuis = String(c.date_solde || '');
   const base = Number(c.solde_initial) || 0;
-  let pointeArrete = 0, nonPointeJour = 0, nonPointeFinMois = 0, pointeJour = 0, engage = 0, finAnnee = 0;
+  let pointeArrete = 0, nonPointeJour = 0, nonPointeFinMois = 0, pointeJour = 0, pointeTotal = 0, engage = 0, finAnnee = 0;
   let utilise = false;
   for (const o of data.Operations) {
     if (o.date <= depuis) continue;
@@ -184,6 +184,7 @@ function soldesCompte(c, jour) {
     if (o.pointe) {
       if (o.date <= dateArrete) pointeArrete += mv;
       if (o.date <= jour) pointeJour += mv;
+      pointeTotal += mv;
     } else {
       if (o.date <= jour) nonPointeJour += mv;
       if (o.date <= finMois) nonPointeFinMois += mv;
@@ -195,7 +196,7 @@ function soldesCompte(c, jour) {
   const fin = base + pointeArrete + nonPointeFinMois;
   return {
     aujourdhui: r(base + pointeArrete + nonPointeJour), finMois: r(fin), engage: r(engage),
-    difference: r(fin + engage), pointe: r(base + pointeJour), finAnnee: r(base + finAnnee),
+    difference: r(fin + engage), pointe: r(base + pointeJour), pointeTotal: r(base + pointeTotal), finAnnee: r(base + finAnnee),
     utilise: utilise || Math.abs(base) > 0.004
   };
 }
@@ -258,9 +259,55 @@ function rendreAccueil() {
   });
 }
 
+/** Les 3 comptes affichés en tuiles : choix mémorisé, sinon les 3 plus utilisés ces 3 derniers mois. */
+function comptesTuiles() {
+  const noms = data.Comptes.map(c => c.nom);
+  const choix = (local.tuiles || []).filter(n => noms.indexOf(n) !== -1);
+  if (choix.length === 3) return choix;
+  const depuis = decalerJours(aujourdhui(), -92), usage = {};
+  data.Operations.forEach(o => { if (o.date >= depuis) { usage[o.compte] = (usage[o.compte] || 0) + 1; if (o.compte_vers) usage[o.compte_vers] = (usage[o.compte_vers] || 0) + 1; } });
+  const parUsage = noms.slice().sort((a, b) => (usage[b] || 0) - (usage[a] || 0));
+  parUsage.forEach(n => { if (choix.length < 3 && choix.indexOf(n) === -1) choix.push(n); });
+  return choix;
+}
+
+let dernieresValeursTuiles = {};
+function rendreTuiles() {
+  const jour = aujourdhui();
+  const noms = comptesTuiles();
+  $('#tuilesPointage').innerHTML = noms.map((nom, i) => {
+    const c = data.Comptes.find(x => x.nom === nom);
+    const v = c ? soldesCompte(c, jour).pointeTotal : 0;
+    const change = dernieresValeursTuiles[i] !== undefined && dernieresValeursTuiles[nom + i] !== v;
+    dernieresValeursTuiles[i] = true; dernieresValeursTuiles[nom + i] = v;
+    return '<button type="button" class="tuile' + (change ? ' maj' : '') + '" data-index="' + i + '">' +
+      '<span class="n">' + esc(nom) + '</span><span class="v' + (v < 0 ? ' neg' : '') + '">' + euros(v) + '</span><span class="p">pointé</span></button>';
+  }).join('');
+  $$('#tuilesPointage .tuile').forEach(t => t.onclick = () => ouvrirChoixCompte(Number(t.dataset.index)));
+}
+
+function ouvrirChoixCompte(index) {
+  const actuels = comptesTuiles(), jour = aujourdhui();
+  const comptes = data.Comptes.slice().sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+  $('#listeChoixComptes').innerHTML = comptes.map(c =>
+    '<button type="button" class="choix' + (c.nom === actuels[index] ? ' courant' : '') + '" data-nom="' + esc(c.nom) + '">' +
+    '<span>' + esc(c.nom) + '</span><b>' + euros(soldesCompte(c, jour).pointeTotal) + '</b></button>').join('');
+  $$('#listeChoixComptes .choix').forEach(b => b.onclick = () => {
+    const nouveaux = actuels.slice();
+    const ailleurs = nouveaux.indexOf(b.dataset.nom);
+    if (ailleurs !== -1 && ailleurs !== index) nouveaux[ailleurs] = nouveaux[index];   // échange si déjà affiché ailleurs
+    nouveaux[index] = b.dataset.nom;
+    local.tuiles = nouveaux; ecrire(LS.local, local);
+    $('#choixCompte').hidden = true;
+    rendreTuiles();
+  });
+  $('#choixCompte').hidden = false;
+}
+
 function libelleMois(y, m) { return MOIS[m - 1] + ' ' + y; }
 
 function rendreJournal() {
+  rendreTuiles();
   if (!moisJournal) { const j = aujourdhui(); moisJournal = [Number(j.slice(0, 4)), Number(j.slice(5, 7))]; }
   const [y, m] = moisJournal;
   $('#moisLibelle').textContent = libelleMois(y, m);
@@ -739,8 +786,12 @@ function rendreReglages(erreur) {
 /* ================= Démarrage ================= */
 
 function brancher() {
-  $$('.onglets button').forEach(b => b.onclick = () => { edition = null; idsSurlignes = new Set(); afficherVue(b.dataset.vue); });
-  $('#fab').onclick = () => ouvrirFormulaire();
+  $$('.onglets button').forEach(b => b.onclick = () => {
+    edition = null; idsSurlignes = new Set();
+    if (b.dataset.vue === 'saisie') ouvrirFormulaire(); else afficherVue(b.dataset.vue);
+  });
+  $('#fermerChoix').onclick = () => { $('#choixCompte').hidden = true; };
+  $('#choixCompte').onclick = e => { if (e.target.id === 'choixCompte') $('#choixCompte').hidden = true; };
   $('#etatSync').onclick = () => synchroniser();
   $('#moisPrec').onclick = () => { let [y, m] = moisJournal; m--; if (!m) { m = 12; y--; } moisJournal = [y, m]; rendreJournal(); };
   $('#moisSuiv').onclick = () => { let [y, m] = moisJournal; m++; if (m > 12) { m = 1; y++; } moisJournal = [y, m]; rendreJournal(); };
@@ -792,6 +843,7 @@ function brancher() {
   };
 
   window.addEventListener('online', synchroniser);
+  setInterval(() => { if (outbox.length) synchroniser(); }, 60000);   // filet : réessaie tant qu'il reste des saisies à envoyer
   window.addEventListener('offline', () => majEtatSync());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') synchroniser(); });
 }

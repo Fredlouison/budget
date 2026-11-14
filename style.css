@@ -28,7 +28,7 @@ body {
 .barre {
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; justify-content: space-between;
-  padding: calc(10px + var(--haut)) 16px 10px;
+  height: calc(48px + var(--haut)); padding: var(--haut) 16px 0;
   background: var(--principal); color: #fff;
 }
 .barre h1 { margin: 0; font-size: 18px; }
@@ -145,7 +145,7 @@ button.lien.danger { color: var(--rouge); }
 /* Navigation */
 .onglets {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   background: #fff; border-top: 1px solid var(--bord); padding-bottom: var(--bas);
 }
 .onglets button { border: 0; background: none; padding: 8px 0 10px; font-size: 11px; font-weight: 700; color: var(--discret); }
@@ -174,3 +174,33 @@ body.saisie .fab { display: none; }
 
 .op.surligne { border: 2px solid var(--accent); background: #eaf1ff; animation: flash 1.2s ease-out 2; }
 @keyframes flash { 50% { background: #c7dbff; } }
+
+/* Bouton Saisir dans la barre du bas */
+.onglets button.saisir { color: var(--accent); }
+.onglets button.saisir span {
+  width: 34px; height: 34px; margin: -2px auto 2px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 26px; line-height: 32px; font-weight: 400;
+}
+.onglets button.saisir.actif span { background: var(--principal); }
+
+/* Tuiles de pointage, fixes en haut du journal */
+.tuiles {
+  position: sticky; top: calc(48px + var(--haut)); z-index: 5;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  margin: -12px -12px 10px; padding: 8px 12px; background: var(--fond); border-bottom: 1px solid var(--bord);
+}
+.tuile { text-align: left; border: 1px solid var(--bord); background: #fff; border-radius: 10px; padding: 6px 8px; min-width: 0; cursor: pointer; }
+.tuile .n { display: block; font-size: 11px; font-weight: 700; color: var(--discret); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tuile .v { display: block; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tuile .p { display: block; font-size: 10px; color: var(--discret); }
+.tuile.maj { animation: flash 0.8s ease-out; }
+
+/* Fenêtre de choix de compte */
+.modal { position: fixed; inset: 0; z-index: 30; background: rgba(20,32,43,.45); display: flex; align-items: flex-end; justify-content: center; }
+.modal .feuille { width: 100%; max-width: 520px; max-height: 80vh; overflow-y: auto; background: #fff; border-radius: 16px 16px 0 0; padding: 16px 16px calc(16px + var(--bas)); }
+.modal h2 { margin: 0 0 10px; font-size: 16px; }
+.modal .choix { display: flex; justify-content: space-between; width: 100%; padding: 12px; margin-bottom: 6px; border: 1px solid var(--bord); border-radius: 10px; background: #fff; font: inherit; font-weight: 600; text-align: left; }
+.modal .choix.courant { border-color: var(--accent); background: #eaf1ff; }
+.modal .choix b { font-variant-numeric: tabular-nums; }
+.modal .secondaire { width: 100%; margin-top: 4px; }
+@media (min-width: 700px) { .modal { align-items: center; } .modal .feuille { border-radius: 16px; } }
