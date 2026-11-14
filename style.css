@@ -439,3 +439,9 @@ button.lien.danger { color: var(--rouge); }
   .barre-journal .nav-mois button { width: 28px; }
   .barre-journal #recherche, .barre-journal #filtreCompte { font-size: 14px; padding: 0 8px; }
 }
+
+/* Désignation automatique (retrait) */
+#designation.auto { color: var(--discret); background: var(--carte2); cursor: default; }
+/* Libellés alignés même avec une étoile ou un « + » */
+.grille2 { align-items: end; }
+.champ .etoile, .champ .ajout { line-height: 1; vertical-align: baseline; }

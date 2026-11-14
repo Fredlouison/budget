@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.20.0';
+const VERSION_APP = '1.21.0';
 const VERSION_SCRIPT_ATTENDUE = '2.2.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -518,6 +518,10 @@ function chargerSousCategories(valeur) {
   remplirSelect($('#sous_categorie'), listeSousCategories($('#categorie').value), $('#categorie').value ? '— choisir —' : '— catégorie d\'abord —', valeur);
 }
 
+/** Désignation automatique d'un retrait. */
+function designationRetrait() { return 'Retrait ' + ($('#compte').value || '…') + ' → ' + ($('#vers').value || '…'); }
+function majDesignationRetrait() { if (typeCourant === 'RETRAIT') $('#designation').value = designationRetrait(); }
+
 /** Compte « Espèces » (pour les retraits). */
 function compteEspeces() {
   return listeComptes().find(n => /^esp[eè]ces$/i.test(n.normalize('NFD').replace(/[\u0300-\u036f]/g, '')) || /^especes$/i.test(n.normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) || '';
@@ -528,10 +532,13 @@ function definirType(type) {
   $$('#segType button').forEach(b => b.classList.toggle('actif', b.dataset.type === type));
   const vir = type === 'VIREMENT' || type === 'RETRAIT';
   if (type === 'RETRAIT') $('#vers').value = compteEspeces();     // retrait = mouvement vers Espèces
-  // Désignation par défaut d'un retrait : « Retrait » (retirée si on change de type sans l'avoir modifiée)
+  // Retrait : désignation automatique « Retrait <compte> → <vers> », non modifiable
   const desi = $('#designation');
-  if (type === 'RETRAIT' && !desi.value.trim()) desi.value = 'Retrait';
-  else if (type !== 'RETRAIT' && desi.value === 'Retrait') desi.value = '';
+  const etaitAuto = desi.readOnly;
+  desi.readOnly = type === 'RETRAIT';
+  desi.classList.toggle('auto', type === 'RETRAIT');
+  if (type === 'RETRAIT') majDesignationRetrait();
+  else if (etaitAuto) desi.value = '';
   $('#champVers').hidden = !vir;
   $('#champPaiement').hidden = vir;
   $('#blocClassement').hidden = vir;
@@ -608,6 +615,7 @@ function ouvrirFormulaire(opts) {
   opts = opts || {};
   edition = opts.op || null;
   const f = $('#formulaire'); f.reset();
+  $('#designation').readOnly = false; $('#designation').classList.remove('auto');
   $('#erreurForm').textContent = '';
   $$('.invalide', f).forEach(x => x.classList.remove('invalide'));
 
@@ -859,8 +867,8 @@ function enregistrer(ev) {
   const sous = type === 'VIREMENT' ? '' : $('#sous_categorie').value;
   if (type !== 'VIREMENT') ok &= marquer($('#categorie'), !!categorie, 'catégorie') & marquer($('#sous_categorie'), !!sous, 'sous-catégorie');
   if (!ok) { signalerManquants(); return; }
-  let designation = $('#designation').value.trim();
-  if (!designation) designation = typeCourant === 'RETRAIT' ? 'Retrait' : type === 'VIREMENT' ? 'Virement ' + compte + ' → ' + commun.compte_vers : (commun.enseigne || sous);
+  let designation = typeCourant === 'RETRAIT' ? designationRetrait() : $('#designation').value.trim();
+  if (!designation) designation = type === 'VIREMENT' ? 'Virement ' + compte + ' → ' + commun.compte_vers : (commun.enseigne || sous);
   const fiche = Object.assign({}, commun, { designation, categorie, sous_categorie: sous, montant: signe(montant) });
 
   // --- Modification avec changement de fréquence (s'applique à partir de cette date) ---
@@ -1149,6 +1157,8 @@ function brancher() {
     majEtoiles();
   };
   $('#paiement').onchange = majEtoiles;
+  $('#vers').addEventListener('change', majDesignationRetrait);
+  $('#compte').addEventListener('change', majDesignationRetrait);
   $('#designation').onchange = completerDepuisHistorique;
   $('#montant').onblur = () => { try { const v = calculer($('#montant').value); if (v !== null) $('#montant').value = v.toFixed(2).replace('.', ','); } catch (e) { $('#montant').classList.add('invalide'); } };
   $('#plus').onclick = () => { const m = $('#montant'); m.value += '+'; m.focus(); };
