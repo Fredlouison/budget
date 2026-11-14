@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.17.0';
+const VERSION_APP = '1.18.0';
 const VERSION_SCRIPT_ATTENDUE = '2.2.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -70,13 +70,15 @@ function param(cle) { const p = data.Parametres.find(x => x.cle === cle); return
 
 /** Couleur d'un compte (paramètre « couleur:<nom> »), et sa version très claire pour le fond des lignes. */
 function couleurCompte(nom) { return param('couleur:' + nom) || ''; }
+/** Liseré gauche en couleur pleine du compte. */
+function liseret(nom) { const c = couleurCompte(nom); return c ? 'border-left:5px solid ' + c + ';' : ''; }
 function styleCase(nom) { const c = couleurCompte(nom); return c ? ' style="accent-color:' + esc(c) + '"' : ''; }
 function fondCompte(nom) {
   const c = couleurCompte(nom);
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c);
   if (!m) return '';
   const base = [18, 21, 25];   // couleur des cartes (thème sombre)
-  const teinte = (h, i) => Math.round(base[i] + (parseInt(h, 16) - base[i]) * 0.12);   // 12 % de la couleur sur la carte
+  const teinte = (h, i) => Math.round(base[i] + (parseInt(h, 16) - base[i]) * 0.18);   // 18 % de la couleur sur la carte
   return 'rgb(' + teinte(m[1], 0) + ',' + teinte(m[2], 1) + ',' + teinte(m[3], 2) + ')';
 }
 
@@ -442,8 +444,9 @@ function rendreJournal() {
         '<input type="checkbox" class="coche" data-cote="arrivee" ' + (estPointeVers(o) ? 'checked' : '') + styleCase(o.compte_vers) + ' title="Pointé sur ' + esc(o.compte_vers) + '" aria-label="Pointé sur ' + esc(o.compte_vers) + '"></span>'
       : '<input type="checkbox" class="coche" ' + (o.pointe ? 'checked' : '') + styleCase(o.compte) + ' aria-label="Pointée">';
     const prevue = vir ? (!o.pointe || !estPointeVers(o)) : !o.pointe;
+    const style = (fond ? 'background:' + fond + ';' : '') + liseret(o.compte);
     return '<div class="op' + (prevue && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
-      (fond ? ' style="background:' + fond + '"' : '') + '>' + cases +
+      (style ? ' style="' + esc(style) + '"' : '') + '>' + cases +
       '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' 💬' : '') + '</div>' +
       '<div class="s">' + sous + '</div></div>' +
       '<div class="m ' + classe + '">' + euros(montantAffiche) + '</div></div>';
@@ -465,7 +468,7 @@ function rendreJournal() {
     const surligne = el.enfants.some(x => idsSurlignes.has(x.id));
     const fondG = fondCompte(o.compte);
     html += '<div class="op groupe' + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '"' +
-      (fondG ? ' style="background:' + fondG + '"' : '') + '>' +
+      ((fondG || liseret(o.compte)) ? ' style="' + esc((fondG ? 'background:' + fondG + ';' : '') + liseret(o.compte)) + '"' : '') + '>' +
       '<input type="checkbox" class="coche" ' + (toutPointe ? 'checked' : '') + styleCase(o.compte) + ' aria-label="Pointée">' +
       '<div class="lib"><div class="t"><span class="picto" title="Dépense ventilée">' + (ouvert ? '▾' : '▸') + ' ' + el.enfants.length + '</span>' + esc(titre) + (o.commentaire ? ' 💬' : '') + '</div>' +
       '<div class="s">Ventilée · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '') + '</div></div>' +
