@@ -1,6 +1,6 @@
 [hidden] { display: none !important; }
 :root {
-  --fond: #f2f4f7;
+  --fond: #000000;
   --carte: #ffffff;
   --texte: #14202b;
   --discret: #667085;
@@ -325,3 +325,12 @@ details.carte[open] > summary { margin-bottom: 8px; }
 /* Virement : deux cases de pointage empilées (départ / arrivée) */
 .op .coches { display: flex; flex-direction: column; gap: 4px; align-items: center; }
 .op .coches .coche { width: 21px; height: 21px; }
+
+/* Fond noir : textes posés directement sur le fond en clair (ceux des cartes restent foncés) */
+body { color-scheme: light; }
+.vue > .champ, #formulaire > .champ, #formulaire .grille2 > .champ, #formulaire .ligne-montant-date .champ,
+#formulaire #blocClassement .champ, #formulaire > div > .champ, #formulaire .interrupteur, .ligne-raccourcis .interrupteur,
+.jour, .resume, .nav-mois strong, details.autres > summary, .pied-ventilation strong, #vue-saisie .vide { color: #e5e7eb; }
+.resume b.neg, #formulaire > .erreur { color: #f87171 !important; }
+.resume b.pos { color: #4ade80 !important; }
+.etoile { color: #cbd5e1; }
