@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.3.0';
+const VERSION_APP = '1.3.1';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -599,11 +599,6 @@ function ajouterLigneVentilation() {
   remplirSelect($('.v-sous', div), [], 'Sous-catégorie', '');
   $('.v-categorie', div).onchange = () => remplirSelect($('.v-sous', div), listeSousCategories($('.v-categorie', div).value), 'Sous-catégorie', '');
   $('.v-montant', div).oninput = majTotalVentilation;
-  $('.v-montant', div).onblur = e => {   // affiche le résultat du calcul en sortant du champ
-    try { const v = calculer(e.target.value); if (v !== null) e.target.value = v.toFixed(2).replace('.', ','); e.target.classList.remove('invalide'); }
-    catch (err) { e.target.classList.add('invalide'); }
-    majTotalVentilation();
-  };
   $('.suppr', div).onclick = () => { div.remove(); majTotalVentilation(); };
 }
 
