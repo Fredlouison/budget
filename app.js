@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.15.0';
+const VERSION_APP = '1.15.1';
 const VERSION_SCRIPT_ATTENDUE = '2.2.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -75,7 +75,7 @@ function fondCompte(nom) {
   const c = couleurCompte(nom);
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(c);
   if (!m) return '';
-  const clair = h => Math.round(255 - (255 - parseInt(h, 16)) * 0.12);   // 12 % de la couleur sur fond blanc
+  const clair = h => Math.round(255 - (255 - parseInt(h, 16)) * 0.07);   // 7 % de la couleur sur fond blanc
   return 'rgb(' + clair(m[1]) + ',' + clair(m[2]) + ',' + clair(m[3]) + ')';
 }
 
