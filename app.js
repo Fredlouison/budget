@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.5.0';
+const VERSION_APP = '1.6.0';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -496,7 +496,7 @@ function ouvrirFormulaire(opts) {
   $('#listeDesignations').innerHTML = Object.keys(noms).slice(0, 400).map(n => '<option value="' + esc(n) + '">').join('');
 
   $('#zoneRaccourcis').hidden = !!edition;
-  $('#champFrequence').hidden = !!edition;
+  $('#champFrequence').hidden = false;
   $('#champPointe').hidden = !edition;
   $('#btnSupprimer').hidden = !edition;
   $('#champSuivantes').hidden = !(edition && edition.serie_id);
@@ -510,6 +510,8 @@ function ouvrirFormulaire(opts) {
     $('#designation').value = edition.designation;
     $('#commentaire').value = edition.commentaire || '';
     $('#pointe').checked = !!edition.pointe;
+    const serieActuelle = edition.serie_id && data.Series.find(x => x.id === edition.serie_id);
+    $('#frequence').value = serieActuelle && (!serieActuelle.fin || serieActuelle.fin >= edition.date) ? serieActuelle.frequence : 'UNE_FOIS';
   } else {
     definirType('DEPENSE');
     $('#date').value = dateParDefaut();
@@ -585,7 +587,7 @@ function basculerVentilation() {
   $('#blocCategorie').hidden = on;
   $('#champMontant').hidden = on;
   $('#champDesignation').hidden = on;
-  $('#champFrequence').hidden = on || !!edition;
+  $('#champFrequence').hidden = on;
   if (on && !$('#lignesVentilation').children.length) { ajouterLigneVentilation(); ajouterLigneVentilation(); }
   majTotalVentilation();
 }
@@ -633,12 +635,40 @@ function occurrencesSerie(serie, annee) {
   return res;
 }
 
-function marquer(el, ok) { el.classList.toggle('invalide', !ok); return ok; }
+/** Échéances d'une série strictement après une date, sur l'année de cette date (et l'année suivante si déjà préparée). */
+function echeancesApres(serie, date, fiche) {
+  const annee = Number(date.slice(0, 4));
+  const annees = [annee];
+  if (param('annee_generee_' + (annee + 1))) annees.push(annee + 1);
+  const muts = [];
+  annees.forEach(a => occurrencesSerie(serie, a).filter(d => d > date).forEach(d => {
+    muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({}, fiche, {
+      id: nouvelId(), date: d, pointe: false, serie_id: serie.id, source: 'appli', commentaire: '' }) });
+  }));
+  return muts;
+}
+
+/** Suppression des échéances non pointées d'une série après une date. */
+function supprimerEcheancesApres(serieId, date) {
+  return data.Operations.filter(o => o.serie_id === serieId && o.date > date && !o.pointe)
+    .map(o => ({ table: 'Operations', op: 'delete', data: { id: o.id } }));
+}
+
+let manquants = [];
+function marquer(el, ok, nom) { el.classList.toggle('invalide', !ok); if (!ok && nom) manquants.push(nom); return ok; }
+
+/** Message qui cite les champs manquants, et défilement jusqu'au premier. */
+function signalerManquants() {
+  $('#erreurForm').textContent = 'Complète : ' + (manquants.join(', ') || 'les champs en rouge') + '.';
+  const premier = $('#formulaire .invalide');
+  if (premier) premier.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 
 function enregistrer(ev) {
   ev.preventDefault();
   const err = $('#erreurForm'); err.textContent = '';
   $$('#formulaire .invalide').forEach(x => x.classList.remove('invalide'));
+  manquants = [];
   const type = typeCourant;
   const date = $('#date').value;
   const compte = $('#compte').value;
@@ -648,8 +678,8 @@ function enregistrer(ev) {
     compte_vers: type === 'VIREMENT' ? $('#vers').value : '',
     commentaire: $('#commentaire').value.trim()
   };
-  let ok = marquer($('#date'), !!date) & marquer($('#compte'), !!compte);
-  if (type === 'VIREMENT') ok &= marquer($('#vers'), !!commun.compte_vers && commun.compte_vers !== compte);
+  let ok = marquer($('#date'), !!date, 'date') & marquer($('#compte'), !!compte, 'compte');
+  if (type === 'VIREMENT') ok &= marquer($('#vers'), !!commun.compte_vers && commun.compte_vers !== compte, commun.compte_vers ? 'compte « Vers » différent' : 'compte « Vers »');
   const signe = v => type === 'DEPENSE' ? -Math.abs(v) : Math.abs(v);
 
   // --- Ventilation : plusieurs lignes, même date / compte / paiement / enseigne ---
@@ -659,32 +689,70 @@ function enregistrer(ev) {
     const ops = [];
     const groupe = 'G-' + nouvelId();
     const intitule = $('#intitule').value.trim();
+    const toutesLignes = $$('#lignesVentilation .ligne-ventilation');
     lignes.forEach(l => {
       let v = null; try { v = calculer(l.montantTexte); } catch (e) { /* invalide */ }
-      ok &= marquer($('.v-designation', l.div), !!l.designation) & marquer($('.v-categorie', l.div), !!l.categorie) &
-        marquer($('.v-sous', l.div), !!l.sous_categorie) & marquer($('.v-montant', l.div), v > 0);
+      const n = ' (ligne ' + (toutesLignes.indexOf(l.div) + 1) + ')';
+      ok &= marquer($('.v-designation', l.div), !!l.designation, 'désignation' + n) & marquer($('.v-categorie', l.div), !!l.categorie, 'catégorie' + n) &
+        marquer($('.v-sous', l.div), !!l.sous_categorie, 'sous-catégorie' + n) & marquer($('.v-montant', l.div), v > 0, 'montant' + n);
       ops.push(Object.assign({ id: nouvelId() }, commun, { designation: l.designation, categorie: l.categorie,
         sous_categorie: l.sous_categorie, montant: signe(v || 0), pointe: false, serie_id: '', source: 'appli',
         groupe, groupe_libelle: intitule }));
     });
-    if (!ok) { err.textContent = 'Complète les champs en rouge.'; return; }
+    if (!ok) { signalerManquants(); return; }
     modifier(ops.map(o => ({ table: 'Operations', op: 'upsert', data: o })));
     return terminerSaisie(date, ops.length + ' lignes enregistrées', ops.map(o => o.id));
   }
 
   let montant = null;
   try { montant = calculer($('#montant').value); } catch (e) { /* invalide */ }
-  ok &= marquer($('#montant'), montant > 0);
+  ok &= marquer($('#montant'), montant > 0, 'montant');
   const categorie = type === 'VIREMENT' ? '' : $('#categorie').value;
   const sous = type === 'VIREMENT' ? '' : $('#sous_categorie').value;
-  if (type !== 'VIREMENT') ok &= marquer($('#categorie'), !!categorie) & marquer($('#sous_categorie'), !!sous);
-  if (!ok) { err.textContent = 'Complète les champs en rouge.'; return; }
+  if (type !== 'VIREMENT') ok &= marquer($('#categorie'), !!categorie, 'catégorie') & marquer($('#sous_categorie'), !!sous, 'sous-catégorie');
+  if (!ok) { signalerManquants(); return; }
   let designation = $('#designation').value.trim();
   if (!designation) designation = type === 'VIREMENT' ? 'Virement ' + compte + ' → ' + commun.compte_vers : (commun.enseigne || sous);
   const fiche = Object.assign({}, commun, { designation, categorie, sous_categorie: sous, montant: signe(montant) });
 
-  // --- Modification ---
+  // --- Modification avec changement de fréquence (s'applique à partir de cette date) ---
   if (edition) {
+    const serieAvant = edition.serie_id && data.Series.find(x => x.id === edition.serie_id);
+    const freqAvant = serieAvant && (!serieAvant.fin || serieAvant.fin >= edition.date) ? serieAvant.frequence : 'UNE_FOIS';
+    const freqNouv = $('#frequence').value;
+    if (freqNouv !== freqAvant) {
+      const jour = Number(date.slice(8, 10));
+      const champsSerie = { type, designation, enseigne: fiche.enseigne, categorie, sous_categorie: sous, compte,
+        compte_vers: fiche.compte_vers, paiement: fiche.paiement, montant: fiche.montant };
+      const muts = [];
+      let message;
+      if (freqAvant === 'UNE_FOIS') {                       // devient récurrente
+        const serie = Object.assign({ id: 'S-' + nouvelId(), frequence: freqNouv, jour, debut: date, fin: '', actif: true }, champsSerie);
+        muts.push({ table: 'Series', op: 'upsert', data: serie });
+        muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({ id: edition.id, pointe: $('#pointe').checked, serie_id: serie.id }, fiche) });
+        const suivantes = echeancesApres(serie, date, fiche);
+        muts.push(...suivantes);
+        message = 'Opération rendue récurrente : ' + suivantes.length + ' échéance(s) ajoutée(s)';
+      } else {
+        const suppr = supprimerEcheancesApres(serieAvant.id, edition.date);
+        muts.push(...suppr);
+        muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({ id: edition.id, pointe: $('#pointe').checked }, fiche) });
+        if (freqNouv === 'UNE_FOIS') {                      // la série s'arrête à cette opération
+          muts.push({ table: 'Series', op: 'upsert', data: { id: serieAvant.id, fin: date } });
+          message = 'Récurrence arrêtée : ' + suppr.length + ' échéance(s) suivante(s) supprimée(s)';
+        } else {                                            // nouvelle fréquence à partir de cette date
+          const serie = Object.assign({}, serieAvant, champsSerie, { frequence: freqNouv, jour, debut: date, fin: '', actif: true });
+          muts.push({ table: 'Series', op: 'upsert', data: serie });
+          const suivantes = echeancesApres(serie, date, fiche);
+          muts.push(...suivantes);
+          message = 'Fréquence modifiée : ' + suivantes.length + ' échéance(s) recalculée(s)';
+        }
+      }
+      modifier(muts);
+      return terminerSaisie(date, message, [edition.id]);
+    }
+
+    // --- Modification simple ---
     const muts = [{ table: 'Operations', op: 'upsert', data: Object.assign({ id: edition.id, pointe: $('#pointe').checked }, fiche) }];
     if (edition.serie_id && $('#suivantes').checked) {
       const jour = Number(date.slice(8, 10));
@@ -710,14 +778,8 @@ function enregistrer(ev) {
   }
   const serie = Object.assign({ id: 'S-' + nouvelId(), frequence, jour: Number(date.slice(8, 10)), debut: date, fin: '', actif: true }, fiche);
   delete serie.date; delete serie.commentaire;
-  const annee = Number(date.slice(0, 4));
-  const annees = [annee];
-  if (param('annee_generee_' + (annee + 1))) annees.push(annee + 1);
-  const muts = [{ table: 'Series', op: 'upsert', data: serie }];
-  annees.forEach(a => occurrencesSerie(serie, a).filter(d => d >= date).forEach(d => {
-    muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({}, fiche, {
-      id: nouvelId(), date: d, pointe: false, serie_id: serie.id, source: 'appli', commentaire: d === date ? fiche.commentaire : '' }) });
-  }));
+  const premiere = { table: 'Operations', op: 'upsert', data: Object.assign({}, fiche, { id: nouvelId(), date, pointe: false, serie_id: serie.id, source: 'appli' }) };
+  const muts = [{ table: 'Series', op: 'upsert', data: serie }, premiere].concat(echeancesApres(serie, date, fiche));
   modifier(muts);
   terminerSaisie(date, (muts.length - 1) + ' échéance(s) créée(s)', muts.filter(m => m.table === 'Operations' && m.data.date === date).map(m => m.data.id));
 }
