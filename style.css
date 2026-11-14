@@ -412,3 +412,7 @@ button.lien.danger { color: var(--rouge); }
 .ligne-raccourcis .lieu { height: 32px; padding: 4px 10px; font-size: 14px; }
 .ligne-raccourcis .interrupteur input { width: 18px; height: 18px; }
 #favoris:not([hidden]) { margin-top: 0; }
+
+/* Virement : case du départ à gauche, case de l'arrivée à droite */
+.op.virement { grid-template-columns: 34px 1fr auto 34px; }
+.op.virement .coche[data-cote="arrivee"] { justify-self: end; }

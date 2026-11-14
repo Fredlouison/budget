@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.18.0';
+const VERSION_APP = '1.19.0';
 const VERSION_SCRIPT_ATTENDUE = '2.2.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -437,19 +437,19 @@ function rendreJournal() {
       ? 'Virement · ' + esc(o.compte) + ' → ' + esc(o.compte_vers)
       : esc([o.categorie, o.sous_categorie].filter(Boolean).join(' › ')) + (extra ? '' : ' · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : ''));
     const vir = o.type === 'VIREMENT';
-    let fond = fondCompte(o.compte);
-    if (vir && (fond || fondCompte(o.compte_vers))) fond = 'linear-gradient(90deg,' + (fond || 'var(--carte)') + ',' + (fondCompte(o.compte_vers) || 'var(--carte)') + ')';
-    const cases = vir
-      ? '<span class="coches"><input type="checkbox" class="coche" data-cote="depart" ' + (o.pointe ? 'checked' : '') + styleCase(o.compte) + ' title="Pointé sur ' + esc(o.compte) + '" aria-label="Pointé sur ' + esc(o.compte) + '">' +
-        '<input type="checkbox" class="coche" data-cote="arrivee" ' + (estPointeVers(o) ? 'checked' : '') + styleCase(o.compte_vers) + ' title="Pointé sur ' + esc(o.compte_vers) + '" aria-label="Pointé sur ' + esc(o.compte_vers) + '"></span>'
-      : '<input type="checkbox" class="coche" ' + (o.pointe ? 'checked' : '') + styleCase(o.compte) + ' aria-label="Pointée">';
+    // Virement : fond neutre, liseré du départ à gauche et de l'arrivée à droite, une case de chaque côté.
+    const fond = vir ? '' : fondCompte(o.compte);
+    const caseDepart = '<input type="checkbox" class="coche" data-cote="depart" ' + (o.pointe ? 'checked' : '') + styleCase(o.compte) + ' title="Pointé sur ' + esc(o.compte) + '" aria-label="Pointé sur ' + esc(o.compte) + '">';
+    const caseArrivee = '<input type="checkbox" class="coche" data-cote="arrivee" ' + (estPointeVers(o) ? 'checked' : '') + styleCase(o.compte_vers) + ' title="Pointé sur ' + esc(o.compte_vers) + '" aria-label="Pointé sur ' + esc(o.compte_vers) + '">';
+    const cases = vir ? caseDepart : '<input type="checkbox" class="coche" ' + (o.pointe ? 'checked' : '') + styleCase(o.compte) + ' aria-label="Pointée">';
     const prevue = vir ? (!o.pointe || !estPointeVers(o)) : !o.pointe;
-    const style = (fond ? 'background:' + fond + ';' : '') + liseret(o.compte);
-    return '<div class="op' + (prevue && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
+    const lisDroit = vir && couleurCompte(o.compte_vers) ? 'border-right:5px solid ' + couleurCompte(o.compte_vers) + ';' : '';
+    const style = (fond ? 'background:' + fond + ';' : '') + liseret(o.compte) + lisDroit;
+    return '<div class="op' + (vir ? ' virement' : '') + (prevue && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
       (style ? ' style="' + esc(style) + '"' : '') + '>' + cases +
       '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' 💬' : '') + '</div>' +
       '<div class="s">' + sous + '</div></div>' +
-      '<div class="m ' + classe + '">' + euros(montantAffiche) + '</div></div>';
+      '<div class="m ' + classe + '">' + euros(montantAffiche) + '</div>' + (vir ? caseArrivee : '') + '</div>';
   };
 
   let html = '', jourCourant = '';
