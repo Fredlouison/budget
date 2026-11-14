@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.13.1';
+const VERSION_APP = '1.13.2';
 const VERSION_SCRIPT_ATTENDUE = '2.1.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -481,6 +481,10 @@ function definirType(type) {
   $$('#segType button').forEach(b => b.classList.toggle('actif', b.dataset.type === type));
   const vir = type === 'VIREMENT' || type === 'RETRAIT';
   if (type === 'RETRAIT') $('#vers').value = compteEspeces();     // retrait = mouvement vers Espèces
+  // Désignation par défaut d'un retrait : « Retrait » (retirée si on change de type sans l'avoir modifiée)
+  const desi = $('#designation');
+  if (type === 'RETRAIT' && !desi.value.trim()) desi.value = 'Retrait';
+  else if (type !== 'RETRAIT' && desi.value === 'Retrait') desi.value = '';
   $('#champVers').hidden = !vir;
   $('#champPaiement').hidden = vir;
   $('#blocClassement').hidden = vir;
@@ -803,7 +807,7 @@ function enregistrer(ev) {
   if (type !== 'VIREMENT') ok &= marquer($('#categorie'), !!categorie, 'catégorie') & marquer($('#sous_categorie'), !!sous, 'sous-catégorie');
   if (!ok) { signalerManquants(); return; }
   let designation = $('#designation').value.trim();
-  if (!designation) designation = type === 'VIREMENT' ? 'Virement ' + compte + ' → ' + commun.compte_vers : (commun.enseigne || sous);
+  if (!designation) designation = typeCourant === 'RETRAIT' ? 'Retrait' : type === 'VIREMENT' ? 'Virement ' + compte + ' → ' + commun.compte_vers : (commun.enseigne || sous);
   const fiche = Object.assign({}, commun, { designation, categorie, sous_categorie: sous, montant: signe(montant) });
 
   // --- Modification avec changement de fréquence (s'applique à partir de cette date) ---

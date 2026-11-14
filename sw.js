@@ -1,6 +1,6 @@
 /* Service worker : met l'appli en cache pour qu'elle s'ouvre sans réseau.
  * Pour publier une nouvelle version, changer VERSION (et VERSION_APP dans app.js). */
-const VERSION = 'budget-1.13.1';
+const VERSION = 'budget-1.13.2';
 const FICHIERS = ['./', 'index.html', 'app.js', 'style.css', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
