@@ -4,8 +4,8 @@
  */
 'use strict';
 
-const VERSION_APP = '1.22.0';
-const VERSION_SCRIPT_ATTENDUE = '2.2.0';
+const VERSION_APP = '1.23.0';
+const VERSION_SCRIPT_ATTENDUE = '2.3.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
   Operations: ['id'], Series: ['id'], Comptes: ['nom'], Arretes: ['compte', 'annee', 'mois'],
@@ -354,8 +354,9 @@ function rendreTuiles() {
     const v = c ? soldesCompte(c, jour).pointeTotal : 0;
     const change = dernieresValeursTuiles[i] !== undefined && dernieresValeursTuiles[nom + i] !== v;
     dernieresValeursTuiles[i] = true; dernieresValeursTuiles[nom + i] = v;
-    return '<button type="button" class="tuile' + (change ? ' maj' : '') + '" data-index="' + i + '">' +
-      '<span class="n">' + esc(nom) + '</span><span class="v' + (v < 0 ? ' neg' : '') + '">' + euros(v) + '</span><span class="p">pointé</span></button>';
+    const coul = couleurCompte(nom);
+    return '<button type="button" class="tuile' + (change ? ' maj' : '') + '" data-index="' + i + '"' + (coul ? ' style="--c:' + esc(coul) + '"' : '') + '>' +
+      '<span class="n"><i class="pastille-compte"></i><span class="nom-tuile">' + esc(nom) + '</span></span><span class="v' + (v < 0 ? ' neg' : '') + '">' + euros(v) + '</span><span class="p">pointé</span></button>';
   }).join('');
   $$('#tuilesPointage .tuile').forEach(t => t.onclick = () => ouvrirChoixCompte(Number(t.dataset.index)));
 }
@@ -474,7 +475,7 @@ function rendreJournal() {
     const style = (fond ? 'background:' + fond + ';' : '') + liseret(o.compte) + lisDroit;
     return '<div class="op' + (vir ? ' virement' : '') + (prevue && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
       (style ? ' style="' + esc(style) + '"' : '') + '>' + cases +
-      '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' 💬' : '') + '</div>' +
+      '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' <span class="bulle-com" data-com="' + esc(o.commentaire) + '">💬</span>' : '') + '</div>' +
       '<div class="s">' + sous + '</div></div>' +
       '<div class="m ' + classe + '">' + euros(montantAffiche) + '</div>' + (vir ? caseArrivee : '') + '</div>';
   };
@@ -497,12 +498,18 @@ function rendreJournal() {
     html += '<div class="op groupe' + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '"' +
       ((fondG || liseret(o.compte)) ? ' style="' + esc((fondG ? 'background:' + fondG + ';' : '') + liseret(o.compte)) + '"' : '') + '>' +
       '<input type="checkbox" class="coche" ' + (toutPointe ? 'checked' : '') + styleCase(o.compte) + ' aria-label="Pointée">' +
-      '<div class="lib"><div class="t"><span class="picto" title="Dépense ventilée">' + (ouvert ? '▾' : '▸') + ' ' + el.enfants.length + '</span>' + esc(titre) + (o.commentaire ? ' 💬' : '') + '</div>' +
+      '<div class="lib"><div class="t"><span class="picto" title="Dépense ventilée">' + (ouvert ? '▾' : '▸') + ' ' + el.enfants.length + '</span>' + esc(titre) + (o.commentaire ? ' <span class="bulle-com" data-com="' + esc(o.commentaire) + '">💬</span>' : '') + '</div>' +
       '<div class="s">Ventilée · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '') + '</div></div>' +
       '<div class="m ' + (total < 0 ? 'neg' : 'pos') + '">' + euros(total) + '</div></div>';
     if (ouvert) html += '<div class="sous-ops">' + el.enfants.map(x => ligneOp(x, true)).join('') + '</div>';
   });
   $('#listeOps').innerHTML = html || '<p class="discret">Aucune opération.</p>';
+  // Info-bulle des commentaires : survol (PC) ou appui (mobile) sur 💬
+  $$('#listeOps .bulle-com').forEach(b => {
+    b.onmouseenter = () => afficherBulle(b);
+    b.onmouseleave = () => masquerBulle();
+    b.onclick = e => { e.stopPropagation(); afficherBulle(b); };   // fermeture : appui ailleurs ou défilement
+  });
   $$('#listeOps .op.groupe').forEach(el => {
     const g = el.dataset.groupe;
     $('.coche', el).onchange = e => modifier(data.Operations.filter(o => o.groupe === g)
@@ -525,6 +532,22 @@ function rendreJournal() {
     $('.lib', el).onclick = $('.m', el).onclick = () => ouvrirFormulaire({ op: data.Operations.find(o => o.id === id) });
   });
 }
+
+
+/* ================= Info-bulle ================= */
+
+let bulleSur = null;
+function afficherBulle(cible) {
+  const b = $('#bulle');
+  b.textContent = cible.dataset.com;
+  b.hidden = false;
+  const r = cible.getBoundingClientRect(), l = b.offsetWidth, h = b.offsetHeight;
+  const x = Math.max(8, Math.min(r.left + r.width / 2 - l / 2, window.innerWidth - l - 8));
+  const y = r.top - h - 10 > 60 ? r.top - h - 10 : r.bottom + 10;
+  b.style.left = x + 'px'; b.style.top = y + 'px';
+  bulleSur = cible;
+}
+function masquerBulle() { $('#bulle').hidden = true; bulleSur = null; }
 
 
 /* ================= Formulaire de saisie ================= */
@@ -1263,6 +1286,8 @@ function brancher() {
   };
 
   document.addEventListener('input', e => { if (e.target.classList && e.target.classList.contains('majuscules')) majusculesChamp(e.target); });
+  window.addEventListener('scroll', masquerBulle, { passive: true });
+  document.addEventListener('click', e => { if (bulleSur && !e.target.closest('.bulle-com')) masquerBulle(); });
   window.addEventListener('online', synchroniser);
   setInterval(() => { if (outbox.length) synchroniser(); }, 60000);   // filet : réessaie tant qu'il reste des saisies à envoyer
   window.addEventListener('offline', () => majEtatSync());

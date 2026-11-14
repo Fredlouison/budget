@@ -420,7 +420,7 @@ button.lien.danger { color: var(--rouge); }
 /* Journal : en-tête figé (tuiles, recherche, compte, mois, résumé, catégories) */
 .entete-journal {
   position: sticky; top: calc(48px + var(--haut)); z-index: 5;
-  margin: -12px -12px 8px; padding: 8px 12px 2px; background: var(--fond); border-bottom: 1px solid #1d2a22;
+  margin: -12px -12px 8px; padding: 8px 12px 2px; background: var(--fond);
 }
 .entete-journal .tuiles { position: static; margin: 0 0 8px; padding: 0; border: 0; }
 .barre-journal { display: flex; gap: 6px; align-items: stretch; margin-bottom: 8px; }
@@ -503,3 +503,24 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 .poignee { flex: 0 0 auto; padding: 6px 4px; font-size: 20px; line-height: 1; color: var(--discret); cursor: grab; touch-action: none; user-select: none; }
 .item-compte.deplace { background: var(--carte2); border-radius: 10px; box-shadow: 0 0 0 1px var(--vert), 0 8px 24px rgba(0,0,0,.6); }
 .item-compte.deplace .poignee { color: var(--vert); cursor: grabbing; }
+
+/* Info-bulle des commentaires */
+.bulle-com { cursor: help; }
+.bulle { position: fixed; z-index: 40; max-width: min(280px, calc(100vw - 16px)); padding: 9px 12px; border-radius: 12px;
+  background: #0b0d10; color: var(--texte); border: 1px solid rgba(0,255,127,.55); box-shadow: 0 0 18px rgba(0,255,127,.18), 0 10px 30px rgba(0,0,0,.6);
+  font-size: 13px; line-height: 1.4; white-space: pre-wrap; pointer-events: none; }
+
+/* Tuiles du journal : même modèle que les cartes Soldes */
+.entete-journal .tuile { --c: #3b4250; position: relative; overflow: hidden; padding: 9px 10px 8px 14px; border-radius: 14px;
+  background: radial-gradient(100% 140% at 100% 0%, color-mix(in srgb, var(--c) 24%, transparent), transparent 62%), var(--carte);
+  border: 1px solid var(--bord); transition: transform .12s ease, border-color .12s ease; }
+.entete-journal .tuile::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--c); }
+.entete-journal .tuile:hover { border-color: color-mix(in srgb, var(--c) 60%, var(--bord)); }
+.entete-journal .tuile:active { transform: scale(.98); }
+.entete-journal .tuile .n { display: flex; align-items: center; gap: 6px; color: var(--texte); font-size: 12px; }
+.entete-journal .tuile .n .pastille-compte { width: 7px; height: 7px; }
+.entete-journal .tuile .v { margin-top: 3px; font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+.entete-journal .tuile .p { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+@media (max-width: 420px) { .entete-journal .tuile .v { font-size: 15px; } .entete-journal .tuile { padding-left: 11px; } }
+.entete-journal .tuile .n { min-width: 0; }
+.entete-journal .tuile .nom-tuile { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
