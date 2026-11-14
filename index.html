@@ -29,18 +29,20 @@
 
     <!-- JOURNAL -->
     <section id="vue-journal" class="vue" hidden>
-      <div id="tuilesPointage" class="tuiles"></div>
-      <div class="nav-mois">
-        <button type="button" id="moisPrec" aria-label="Mois précédent">‹</button>
-        <strong id="moisLibelle"></strong>
-        <button type="button" id="moisSuiv" aria-label="Mois suivant">›</button>
+      <div id="enteteJournal" class="entete-journal">
+        <div id="tuilesPointage" class="tuiles"></div>
+        <div class="barre-journal">
+          <input id="recherche" type="search" placeholder="Rechercher…" autocomplete="off">
+          <select id="filtreCompte"></select>
+          <div class="nav-mois">
+            <button type="button" id="moisPrec" aria-label="Mois précédent">‹</button>
+            <strong id="moisLibelle"></strong>
+            <button type="button" id="moisSuiv" aria-label="Mois suivant">›</button>
+          </div>
+        </div>
+        <div id="resumeMois" class="resume"></div>
+        <details id="parCategorie" class="carte"><summary>Dépenses par catégorie</summary><div></div></details>
       </div>
-      <div class="filtres">
-        <select id="filtreCompte"></select>
-        <input id="recherche" type="search" placeholder="Rechercher…" autocomplete="off">
-      </div>
-      <div id="resumeMois" class="resume"></div>
-      <details id="parCategorie" class="carte"><summary>Dépenses par catégorie</summary><div></div></details>
       <div id="listeOps"></div>
     </section>
 

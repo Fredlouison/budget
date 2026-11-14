@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.19.0';
+const VERSION_APP = '1.20.0';
 const VERSION_SCRIPT_ATTENDUE = '2.2.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -383,7 +383,10 @@ function rendreJournal() {
   rendreTuiles();
   if (!moisJournal) { const j = aujourdhui(); moisJournal = [Number(j.slice(0, 4)), Number(j.slice(5, 7))]; }
   const [y, m] = moisJournal;
-  $('#moisLibelle').textContent = libelleMois(y, m);
+  // Mois : libellé long sur PC, court sur mobile (« nov. 2026 »)
+  $('#moisLibelle').textContent = window.matchMedia('(max-width: 699px)').matches
+    ? new Date(y, m - 1, 1).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })
+    : libelleMois(y, m);
 
   const sel = $('#filtreCompte'), choix = sel.value;
   sel.innerHTML = '<option value="">Tous les comptes</option>' +
