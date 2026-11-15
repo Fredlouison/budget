@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.25.1';
+const VERSION_APP = '1.26.0';
 const VERSION_SCRIPT_ATTENDUE = '2.3.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -39,6 +39,7 @@ let typeCourant = 'DEPENSE';
 let favorisOuverts = false;
 let idsSurlignes = new Set();
 let groupesOuverts = new Set();
+let positionJournal = null;   // position du journal quand on ouvre une ligne pour la modifier
 const sortants = new Map();   // lignes qui viennent de changer de pointage : visibles encore un instant
 const FILTRES_POINTAGE = { toutes: ['Toutes les opérations'], apointer: ['À pointer'], pointees: ['Pointées'] };
 const ICONE_FILTRE = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3.5 5h17l-6.5 7.6V19l-4 1.8v-8.2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';   // dépenses ventilées dépliées dans le journal   // lignes à mettre en évidence dans le journal après un enregistrement
@@ -692,6 +693,8 @@ function dateParDefaut() {
 function ouvrirFormulaire(opts) {
   opts = opts || {};
   edition = opts.op || null;
+  // Modification depuis le journal : on retient où l'on était pour y revenir
+  positionJournal = edition && vueCourante === 'journal' ? { y: window.scrollY, mois: moisJournal ? moisJournal.join('-') : '' } : null;
   const f = $('#formulaire'); f.reset();
   $('#designation').readOnly = false; $('#designation').classList.remove('auto');
   $('#erreurForm').textContent = '';
@@ -1035,9 +1038,16 @@ function terminerSaisie(date, message, ids) {
   const filtre = $('#filtreCompte').value;
   const ops = data.Operations.filter(o => idsSurlignes.has(o.id));
   if (filtre && !ops.some(o => o.compte === filtre || o.compte_vers === filtre)) $('#filtreCompte').value = '';
+  revenirAuJournal('#listeOps .op.surligne');
+}
+
+/** Retour au journal à la position d'avant la modification (si on est resté sur le même mois). */
+function revenirAuJournal(ligneCible) {
+  const pos = positionJournal;
+  positionJournal = null;
   afficherVue('journal');
-  const ligne = $('#listeOps .op.surligne');
-  if (ligne) ligne.scrollIntoView({ block: 'center' });
+  if (pos && moisJournal && pos.mois === moisJournal.join('-')) window.scrollTo(0, pos.y);
+  else if (ligneCible) { const l = $(ligneCible); if (l) l.scrollIntoView({ block: 'center' }); }
 }
 
 function supprimerOperation() {
@@ -1053,7 +1063,7 @@ function supprimerOperation() {
   modifier(muts);
   edition = null;
   toast('Supprimé');
-  afficherVue('journal');
+  revenirAuJournal();
 }
 
 function enregistrerFavori() {
@@ -1304,7 +1314,7 @@ function brancher() {
   $('#ventiler').onchange = basculerVentilation;
   $('#ajoutLigne').onclick = () => $('.v-designation', ajouterLigneVentilation()).focus();   // curseur dans la désignation de la nouvelle ligne
   $('#formulaire').onsubmit = enregistrer;
-  $('#btnAnnuler').onclick = () => { const r = edition ? 'journal' : 'accueil'; edition = null; afficherVue(r); };
+  $('#btnAnnuler').onclick = () => { const modif = !!edition; edition = null; if (modif) revenirAuJournal(); else { positionJournal = null; afficherVue('accueil'); } };
   $('#btnSupprimer').onclick = supprimerOperation;
   $('#btnFavori').onclick = enregistrerFavori;
 
