@@ -535,3 +535,27 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 .filtre-pointage { display: flex; align-items: center; justify-content: center; padding: 0; }
 .filtre-pointage svg { fill: none; transition: fill .15s ease; }
 .filtre-pointage[data-etat="pointees"] svg { fill: currentColor; }
+
+/* Densité : champs du formulaire et lignes du journal plus bas */
+#formulaire .champ input, #formulaire .champ select, #formulaire .champ textarea { padding: 7px 10px; font-size: 15px; }
+#formulaire .champ input:not([type=checkbox]):not([type=color]), #formulaire .champ select { height: 38px; }
+#formulaire .champ { margin-bottom: 8px; }
+#formulaire .barre-date input[type=date], #formulaire .date-pc input { height: 38px; min-height: 38px; line-height: 38px; }
+#formulaire .barre-date .mini, #formulaire .barre-date .aujourdhui, #formulaire .ligne-montant-date > .pilule, #formulaire .bloc-montant .mini { height: 38px; }
+#formulaire .plus-moins button { height: 18px; }
+#formulaire .segment button { padding: 7px; }
+#formulaire .ligne-ventilation input, #formulaire .ligne-ventilation select { padding: 6px 8px; height: 34px; font-size: 15px; }
+#formulaire button.principal, #formulaire button.secondaire { padding: 10px; }
+
+.op { padding: 5px 10px; margin-bottom: 4px; gap: 6px; border-radius: 9px; }
+.op .coche { width: 22px; height: 22px; }
+.op .coches .coche, .op.virement .coche { width: 20px; height: 20px; }
+.op .lib .t { font-size: 14px; line-height: 1.25; }
+.op .lib .s { font-size: 11px; line-height: 1.25; }
+.op .m { font-size: 14px; }
+.jour { margin: 10px 4px 3px; }
+.sous-ops .op { padding: 4px 8px; }
+@media (max-width: 699px) {
+  .barre-date input[type=date] { height: 38px !important; min-height: 38px !important; line-height: 38px !important; }
+}
+#formulaire .ligne-montant-date > .champ { margin-bottom: 0; }
