@@ -524,3 +524,10 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 @media (max-width: 420px) { .entete-journal .tuile .v { font-size: 15px; } .entete-journal .tuile { padding-left: 11px; } }
 .entete-journal .tuile .n { min-width: 0; }
 .entete-journal .tuile .nom-tuile { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Filtre de pointage ◐ / ○ / ● */
+.filtre-pointage { flex: 0 0 40px; height: 40px; border: 1px solid var(--bord); border-radius: 10px; background: var(--carte); color: var(--discret);
+  font-size: 18px; line-height: 1; cursor: pointer; transition: all .15s ease; }
+.filtre-pointage.actif { color: var(--vert); border-color: var(--vert); background: rgba(0,255,127,.1); box-shadow: 0 0 10px rgba(0,255,127,.3); }
+.op.sortante { opacity: .4; transition: opacity 2.4s ease; }
+@media (max-width: 699px) { .filtre-pointage { flex-basis: 34px; } }

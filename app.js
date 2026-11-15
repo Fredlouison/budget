@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.23.0';
+const VERSION_APP = '1.24.0';
 const VERSION_SCRIPT_ATTENDUE = '2.3.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -38,7 +38,9 @@ let edition = null;   // opération en cours de modification
 let typeCourant = 'DEPENSE';
 let favorisOuverts = false;
 let idsSurlignes = new Set();
-let groupesOuverts = new Set();   // dépenses ventilées dépliées dans le journal   // lignes à mettre en évidence dans le journal après un enregistrement
+let groupesOuverts = new Set();
+const sortants = new Map();   // lignes qui viennent de changer de pointage : visibles encore un instant
+const FILTRES_POINTAGE = { toutes: ['◐', 'Toutes les opérations'], apointer: ['○', 'À pointer'], pointees: ['●', 'Pointées'] };   // dépenses ventilées dépliées dans le journal   // lignes à mettre en évidence dans le journal après un enregistrement
 
 function videData() {
   const d = {}; Object.keys(CLES).forEach(t => { d[t] = []; }); return d;
@@ -404,6 +406,13 @@ function ouvrirChoixCompte(index, cle, nombre) {
 
 function libelleMois(y, m) { return MOIS[m - 1] + ' ' + y; }
 
+function garderUnInstant(ids) {
+  if ((local.filtrePointage || 'toutes') === 'toutes') return;
+  const fin = Date.now() + 2500;
+  ids.forEach(id => sortants.set(id, fin));
+  setTimeout(() => { if (vueCourante === 'journal') rendreJournal(); }, 2600);
+}
+
 function rendreJournal() {
   rendreTuiles();
   if (!moisJournal) { const j = aujourdhui(); moisJournal = [Number(j.slice(0, 4)), Number(j.slice(5, 7))]; }
@@ -425,6 +434,21 @@ function rendreJournal() {
     (q ? true : o.date.slice(0, 7) === prefixe) &&
     (!compte || o.compte === compte || o.compte_vers === compte) &&
     (!q || [o.designation, o.enseigne, o.categorie, o.sous_categorie, o.commentaire, o.compte, String(o.montant)].join(' ').toLowerCase().includes(q)));
+  // Filtre de pointage (◐ toutes / ○ à pointer / ● pointées)
+  const fp = local.filtrePointage || 'toutes';
+  const btnF = $('#filtrePointage');
+  btnF.textContent = FILTRES_POINTAGE[fp][0];
+  btnF.title = 'Filtre : ' + FILTRES_POINTAGE[fp][1] + ' (toucher pour changer)';
+  btnF.classList.toggle('actif', fp !== 'toutes');
+  if (fp !== 'toutes') {
+    const maintenantMs = Date.now();
+    const estP = o => {
+      if (o.groupe) return data.Operations.filter(x => x.groupe === o.groupe).every(x => x.pointe);
+      if (o.type === 'VIREMENT') return compte ? pointePour(o, compte) : (!!o.pointe && estPointeVers(o));
+      return !!o.pointe;
+    };
+    ops = ops.filter(o => (fp === 'pointees' ? estP(o) : !estP(o)) || (sortants.get(o.id) || 0) > maintenantMs);
+  }
   ops.sort((a, b) => b.date.localeCompare(a.date) || a.designation.localeCompare(b.designation, 'fr'));
   if (q) ops = ops.slice(0, 300);
 
@@ -473,7 +497,7 @@ function rendreJournal() {
     const prevue = vir ? (!o.pointe || !estPointeVers(o)) : !o.pointe;
     const lisDroit = vir && couleurCompte(o.compte_vers) ? 'border-right:5px solid ' + couleurCompte(o.compte_vers) + ';' : '';
     const style = (fond ? 'background:' + fond + ';' : '') + liseret(o.compte) + lisDroit;
-    return '<div class="op' + (vir ? ' virement' : '') + (prevue && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
+    return '<div class="op' + (vir ? ' virement' : '') + ((sortants.get(o.id) || 0) > Date.now() ? ' sortante' : '') + (prevue && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
       (style ? ' style="' + esc(style) + '"' : '') + '>' + cases +
       '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' <span class="bulle-com" data-com="' + esc(o.commentaire) + '">💬</span>' : '') + '</div>' +
       '<div class="s">' + sous + '</div></div>' +
@@ -495,7 +519,7 @@ function rendreJournal() {
     const titre = [o.enseigne, o.groupe_libelle].filter(Boolean).join(' — ') || 'Dépense ventilée';
     const surligne = el.enfants.some(x => idsSurlignes.has(x.id));
     const fondG = fondCompte(o.compte);
-    html += '<div class="op groupe' + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '"' +
+    html += '<div class="op groupe' + (el.enfants.some(x => (sortants.get(x.id) || 0) > Date.now()) ? ' sortante' : '') + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '"' +
       ((fondG || liseret(o.compte)) ? ' style="' + esc((fondG ? 'background:' + fondG + ';' : '') + liseret(o.compte)) + '"' : '') + '>' +
       '<input type="checkbox" class="coche" ' + (toutPointe ? 'checked' : '') + styleCase(o.compte) + ' aria-label="Pointée">' +
       '<div class="lib"><div class="t"><span class="picto" title="Dépense ventilée">' + (ouvert ? '▾' : '▸') + ' ' + el.enfants.length + '</span>' + esc(titre) + (o.commentaire ? ' <span class="bulle-com" data-com="' + esc(o.commentaire) + '">💬</span>' : '') + '</div>' +
@@ -512,8 +536,11 @@ function rendreJournal() {
   });
   $$('#listeOps .op.groupe').forEach(el => {
     const g = el.dataset.groupe;
-    $('.coche', el).onchange = e => modifier(data.Operations.filter(o => o.groupe === g)
-      .map(o => ({ table: 'Operations', op: 'upsert', data: { id: o.id, pointe: e.target.checked } })));
+    $('.coche', el).onchange = e => {
+      const enfants = data.Operations.filter(o => o.groupe === g);
+      garderUnInstant(enfants.map(o => o.id));
+      modifier(enfants.map(o => ({ table: 'Operations', op: 'upsert', data: { id: o.id, pointe: e.target.checked } })));
+    };
     $('.lib', el).onclick = $('.m', el).onclick = () => {
       if (groupesOuverts.has(g)) groupesOuverts.delete(g); else groupesOuverts.add(g);
       rendreJournal();
@@ -527,6 +554,7 @@ function rendreJournal() {
       if (cb.dataset.cote === 'arrivee') maj = { id, pointe_vers: e.target.checked };
       else if (cb.dataset.cote === 'depart') maj = { id, pointe: e.target.checked, pointe_vers: estPointeVers(o) };   // fige le côté arrivée
       else maj = { id, pointe: e.target.checked };
+      garderUnInstant([id]);
       modifier([{ table: 'Operations', op: 'upsert', data: maj }]);
     });
     $('.lib', el).onclick = $('.m', el).onclick = () => ouvrirFormulaire({ op: data.Operations.find(o => o.id === id) });
@@ -1230,6 +1258,14 @@ function brancher() {
   $('#moisPrec').onclick = () => { let [y, m] = moisJournal; m--; if (!m) { m = 12; y--; } moisJournal = [y, m]; rendreJournal(); };
   $('#moisSuiv').onclick = () => { let [y, m] = moisJournal; m++; if (m > 12) { m = 1; y++; } moisJournal = [y, m]; rendreJournal(); };
   $('#filtreCompte').onchange = rendreJournal;
+  $('#filtrePointage').onclick = () => {
+    const ordre = ['toutes', 'apointer', 'pointees'];
+    local.filtrePointage = ordre[(ordre.indexOf(local.filtrePointage || 'toutes') + 1) % 3];
+    ecrire(LS.local, local);
+    sortants.clear();
+    rendreJournal();
+    toast('Filtre : ' + FILTRES_POINTAGE[local.filtrePointage][1]);
+  };
   $('#recherche').oninput = rendreJournal;
 
   $$('#segType button').forEach(b => b.onclick = () => definirType(b.dataset.type));
