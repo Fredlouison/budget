@@ -9,7 +9,7 @@
  * Enseignes, Paiements, Favoris, Parametres.
  */
 
-const VERSION_API = '2.3.0';
+const VERSION_API = '2.4.0';
 const CLE_TOKEN = 'BUDGET_TOKEN';
 
 const TABLES = {
@@ -17,8 +17,8 @@ const TABLES = {
     cle: ['id'],
     colonnes: ['id', 'date', 'type', 'designation', 'enseigne', 'categorie', 'sous_categorie',
       'compte', 'compte_vers', 'paiement', 'montant', 'pointe', 'commentaire', 'serie_id', 'source',
-      'groupe', 'groupe_libelle', 'pointe_vers'],
-    dates: ['date'], booleens: ['pointe'], nombres: ['montant']
+      'groupe', 'groupe_libelle', 'pointe_vers', 'a_verifier'],
+    dates: ['date'], booleens: ['pointe', 'a_verifier'], nombres: ['montant']
   },
   Series: {
     cle: ['id'],

@@ -567,3 +567,15 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 #champVentiler input { width: 20px !important; height: 20px !important; accent-color: var(--bleu); }
 #formulaire .ligne-montant-date > .pilule#champVentiler:has(input:checked) { background: rgba(0,180,255,.18); color: #fff; border-color: var(--bleu);
   box-shadow: 0 0 16px rgba(0,180,255,.55); }
+
+/* Drapeau « à vérifier » */
+.op { grid-template-columns: 34px 1fr auto auto; }
+.op.virement { grid-template-columns: 34px 1fr auto auto 34px; }
+.drapeau { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: #4b5563; cursor: pointer; transition: color .15s ease, background .15s ease; }
+.drapeau svg { fill: none; }
+.drapeau:hover { color: var(--jaune); background: rgba(255,214,10,.08); }
+.drapeau.actif { color: var(--jaune); }
+.drapeau.actif svg { fill: currentColor; }
+.op.a-verifier { background: linear-gradient(0deg, rgba(255,214,10,.2), rgba(255,214,10,.2)), var(--carte) !important;
+  border-color: rgba(255,214,10,.75) !important; box-shadow: 0 0 12px rgba(255,214,10,.22); }

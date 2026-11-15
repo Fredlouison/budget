@@ -4,8 +4,8 @@
  */
 'use strict';
 
-const VERSION_APP = '1.26.0';
-const VERSION_SCRIPT_ATTENDUE = '2.3.0';
+const VERSION_APP = '1.27.0';
+const VERSION_SCRIPT_ATTENDUE = '2.4.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
   Operations: ['id'], Series: ['id'], Comptes: ['nom'], Arretes: ['compte', 'annee', 'mois'],
@@ -42,6 +42,7 @@ let groupesOuverts = new Set();
 let positionJournal = null;   // position du journal quand on ouvre une ligne pour la modifier
 const sortants = new Map();   // lignes qui viennent de changer de pointage : visibles encore un instant
 const FILTRES_POINTAGE = { toutes: ['Toutes les opérations'], apointer: ['À pointer'], pointees: ['Pointées'] };
+const ICONE_DRAPEAU = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 21V4m0 0h11l-2 4 2 4H5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>';
 const ICONE_FILTRE = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3.5 5h17l-6.5 7.6V19l-4 1.8v-8.2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';   // dépenses ventilées dépliées dans le journal   // lignes à mettre en évidence dans le journal après un enregistrement
 
 function videData() {
@@ -501,11 +502,13 @@ function rendreJournal() {
     const prevue = vir ? (!o.pointe || !estPointeVers(o)) : !o.pointe;
     const lisDroit = vir && couleurCompte(o.compte_vers) ? 'border-right:5px solid ' + couleurCompte(o.compte_vers) + ';' : '';
     const style = (fond ? 'background:' + fond + ';' : '') + liseret(o.compte) + lisDroit;
-    return '<div class="op' + (vir ? ' virement' : '') + ((sortants.get(o.id) || 0) > Date.now() ? ' sortante' : '') + (prevue && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
+    const verif = !!o.a_verifier;
+    const drapeau = '<button type="button" class="drapeau' + (verif ? ' actif' : '') + '" data-verif="' + esc(o.id) + '" title="' + (verif ? 'À vérifier (toucher pour retirer)' : 'Marquer à vérifier') + '" aria-label="À vérifier">' + ICONE_DRAPEAU + '</button>';
+    return '<div class="op' + (vir ? ' virement' : '') + (verif ? ' a-verifier' : '') + ((sortants.get(o.id) || 0) > Date.now() ? ' sortante' : '') + (prevue && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
       (style ? ' style="' + esc(style) + '"' : '') + '>' + cases +
       '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' <span class="bulle-com" data-com="' + esc(o.commentaire) + '">💬</span>' : '') + '</div>' +
       '<div class="s">' + sous + '</div></div>' +
-      '<div class="m ' + classe + '">' + euros(montantAffiche) + '</div>' + (vir ? caseArrivee : '') + '</div>';
+      drapeau + '<div class="m ' + classe + '">' + euros(montantAffiche) + '</div>' + (vir ? caseArrivee : '') + '</div>';
   };
 
   let html = '', jourCourant = '';
@@ -523,15 +526,24 @@ function rendreJournal() {
     const titre = [o.enseigne, o.groupe_libelle].filter(Boolean).join(' — ') || 'Dépense ventilée';
     const surligne = el.enfants.some(x => idsSurlignes.has(x.id));
     const fondG = fondCompte(o.compte);
-    html += '<div class="op groupe' + (el.enfants.some(x => (sortants.get(x.id) || 0) > Date.now()) ? ' sortante' : '') + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '"' +
+    const verifG = el.enfants.some(x => x.a_verifier);
+    html += '<div class="op groupe' + (verifG ? ' a-verifier' : '') + (el.enfants.some(x => (sortants.get(x.id) || 0) > Date.now()) ? ' sortante' : '') + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '"' +
       ((fondG || liseret(o.compte)) ? ' style="' + esc((fondG ? 'background:' + fondG + ';' : '') + liseret(o.compte)) + '"' : '') + '>' +
       '<input type="checkbox" class="coche" ' + (toutPointe ? 'checked' : '') + styleCase(o.compte) + ' aria-label="Pointée">' +
       '<div class="lib"><div class="t"><span class="picto" title="Dépense ventilée">' + (ouvert ? '▾' : '▸') + ' ' + el.enfants.length + '</span>' + esc(titre) + (o.commentaire ? ' <span class="bulle-com" data-com="' + esc(o.commentaire) + '">💬</span>' : '') + '</div>' +
       '<div class="s">Ventilée · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '') + '</div></div>' +
+      '<button type="button" class="drapeau' + (verifG ? ' actif' : '') + '" data-verif-groupe="' + esc(el.groupe) + '" title="' + (verifG ? 'À vérifier (toucher pour retirer)' : 'Marquer à vérifier') + '" aria-label="À vérifier">' + ICONE_DRAPEAU + '</button>' +
       '<div class="m ' + (total < 0 ? 'neg' : 'pos') + '">' + euros(total) + '</div></div>';
     if (ouvert) html += '<div class="sous-ops">' + el.enfants.map(x => ligneOp(x, true)).join('') + '</div>';
   });
   $('#listeOps').innerHTML = html || '<p class="discret">Aucune opération.</p>';
+  // Drapeau « à vérifier » : la ligne passe en jaune (sans ouvrir la modification)
+  $$('#listeOps .drapeau').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const cibles = b.dataset.verifGroupe ? data.Operations.filter(o => o.groupe === b.dataset.verifGroupe) : data.Operations.filter(o => o.id === b.dataset.verif);
+    const nouveau = !b.classList.contains('actif');
+    modifier(cibles.map(o => ({ table: 'Operations', op: 'upsert', data: { id: o.id, a_verifier: nouveau } })));
+  });
   // Info-bulle des commentaires : survol (PC) ou appui (mobile) sur 💬
   $$('#listeOps .bulle-com').forEach(b => {
     b.onmouseenter = () => afficherBulle(b);
