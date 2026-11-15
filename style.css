@@ -559,3 +559,11 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
   .barre-date input[type=date] { height: 38px !important; min-height: 38px !important; line-height: 38px !important; }
 }
 #formulaire .ligne-montant-date > .champ { margin-bottom: 0; }
+
+/* Ventiler : bleu électrique, bien visible */
+:root { --bleu: #00b4ff; }
+#formulaire .ligne-montant-date > .pilule#champVentiler { border: 1.5px solid var(--bleu); color: #7fd8ff; background: rgba(0,180,255,.07);
+  box-shadow: 0 0 10px rgba(0,180,255,.25); font-weight: 800; gap: 8px; }
+#champVentiler input { width: 20px !important; height: 20px !important; accent-color: var(--bleu); }
+#formulaire .ligne-montant-date > .pilule#champVentiler:has(input:checked) { background: rgba(0,180,255,.18); color: #fff; border-color: var(--bleu);
+  box-shadow: 0 0 16px rgba(0,180,255,.55); }
