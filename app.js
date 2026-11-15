@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.29.1';
+const VERSION_APP = '1.29.2';
 const VERSION_SCRIPT_ATTENDUE = '2.4.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -867,6 +867,7 @@ function completerDepuisHistorique() {
 function basculerVentilation() {
   const on = $('#ventiler').checked;
   $('#champIntitule').hidden = !on;
+  $('.ligne-montant-date').classList.toggle('mode-ventilation', on);
   $('#ligneEnseigne').classList.toggle('avec-intitule', on);
   $('#blocVentilation').hidden = !on;
   $('#blocCategorie').hidden = on;

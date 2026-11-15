@@ -620,3 +620,11 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
   #formulaire .ligne-ventilation input, #formulaire .ligne-ventilation select,
   .barre-date input[type=date], .date-pc input { font-size: 16px !important; }
 }
+
+/* Mobile, mode Ventiler : date resserrée et Ventiler sur la même ligne (le montant est masqué) */
+@media (max-width: 699px) {
+  .ligne-montant-date.mode-ventilation { flex-wrap: nowrap; }
+  .ligne-montant-date.mode-ventilation .bloc-date { flex: 1 1 0; min-width: 0; }
+  .ligne-montant-date.mode-ventilation .barre-date .mini { flex: 0 0 40px; width: 40px; }
+  .ligne-montant-date.mode-ventilation > .pilule { flex: 0 0 auto; }
+}
