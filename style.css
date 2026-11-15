@@ -515,7 +515,7 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
   background: radial-gradient(100% 140% at 100% 0%, color-mix(in srgb, var(--c) 24%, transparent), transparent 62%), var(--carte);
   border: 1px solid var(--bord); transition: transform .12s ease, border-color .12s ease; }
 .entete-journal .tuile::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--c); }
-.entete-journal .tuile:hover { border-color: color-mix(in srgb, var(--c) 60%, var(--bord)); }
+@media (hover: hover) { .entete-journal .tuile:hover { border-color: color-mix(in srgb, var(--c) 60%, var(--bord)); } }
 .entete-journal .tuile:active { transform: scale(.98); }
 .entete-journal .tuile .n { display: flex; align-items: center; gap: 6px; color: var(--texte); font-size: 12px; }
 .entete-journal .tuile .n .pastille-compte { width: 7px; height: 7px; }
@@ -584,15 +584,15 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 .entete-journal .tuile { transition: transform .12s ease, border-color .12s ease, opacity .2s ease, box-shadow .2s ease; }
 .entete-journal .tuile .changer-compte { flex: 0 0 auto; margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 22px; margin-right: -4px; border-radius: 7px; color: var(--discret); transition: background .12s ease, color .12s ease; }
-.entete-journal .tuile .changer-compte:hover { background: var(--carte2); color: var(--texte); }
+@media (hover: hover) { .entete-journal .tuile .changer-compte:hover { background: var(--carte2); color: var(--texte); } }
 .entete-journal .tuile.filtree { border: 2px solid var(--c); padding: 8px 9px 7px 13px;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent), 0 0 18px color-mix(in srgb, var(--c) 30%, transparent); }
-.entete-journal .tuile.filtree:hover { border-color: var(--c); }
+@media (hover: hover) { .entete-journal .tuile.filtree:hover { border-color: var(--c); } }
 .entete-journal .tuile.filtree .p { color: var(--c); filter: brightness(1.35); }
 .entete-journal .tuile .marque-filtre { position: absolute; right: 8px; bottom: 7px; width: 22px; height: 22px; border-radius: 7px;
   display: flex; align-items: center; justify-content: center; background: var(--c); color: #000; }
 .entete-journal .tuile.estompee { opacity: .42; }
-.entete-journal .tuile.estompee:hover { opacity: .75; }
+@media (hover: hover) { .entete-journal .tuile.estompee:hover { opacity: .75; } }
 @media (max-width: 420px) { .entete-journal .tuile.filtree { padding-left: 10px; } .entete-journal .tuile .marque-filtre { right: 6px; bottom: 6px; width: 18px; height: 18px; } }
 .entete-journal .tuile .p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entete-journal .tuile .p .court { display: none; }
@@ -600,3 +600,4 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
   .entete-journal .tuile .p .long { display: none; } .entete-journal .tuile .p .court { display: inline; }
   .entete-journal .tuile .marque-filtre { display: none; }
 }
+.entete-journal .tuile:focus:not(:focus-visible) { outline: none; }

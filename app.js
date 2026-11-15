@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.28.0';
+const VERSION_APP = '1.28.1';
 const VERSION_SCRIPT_ATTENDUE = '2.4.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
