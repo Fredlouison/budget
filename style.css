@@ -601,3 +601,14 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
   .entete-journal .tuile .marque-filtre { display: none; }
 }
 .entete-journal .tuile:focus:not(:focus-visible) { outline: none; }
+@media (max-width: 699px) {
+  .entete-journal .tuile { padding-right: 6px; }
+  .entete-journal .tuile .n { gap: 4px; }
+  .entete-journal .tuile .changer-compte { width: 14px; height: 18px; margin-right: 0; border-radius: 5px; }
+  .entete-journal .tuile .changer-compte svg { width: 12px; height: 12px; }
+  .entete-journal .tuile .v { font-size: 15px; letter-spacing: -.02em; }
+}
+.entete-journal .tuile { display: block; width: 100%; }
+.entete-journal .tuile .n { width: 100%; }
+.entete-journal .tuile .nom-tuile { flex: 1 1 0; }
+.entete-journal .tuile .v { overflow: hidden; text-overflow: clip; }
