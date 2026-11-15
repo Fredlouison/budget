@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.27.0';
+const VERSION_APP = '1.28.0';
 const VERSION_SCRIPT_ATTENDUE = '2.4.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -351,19 +351,52 @@ function comptesTuiles(cle, nombre) {
 }
 
 let dernieresValeursTuiles = {};
+const ICONE_FILTRE_TUILE = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2v-7.5z" fill="currentColor"/></svg>';
+const ICONE_CHEVRON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/** Solde pointé d'un compte à une date : solde de départ + mouvements pointés jusqu'à cette date incluse. */
+function pointeAu(c, jour) {
+  const depuis = String(c.date_solde || '');
+  let v = Number(c.solde_initial) || 0;
+  for (const o of data.Operations) {
+    if (o.date <= depuis || o.date > jour) continue;
+    const mv = mouvement(o, c.nom);
+    if (mv && pointePour(o, c.nom)) v += mv;
+  }
+  return Math.round(v * 100) / 100;
+}
+
 function rendreTuiles() {
   const jour = aujourdhui();
   const noms = comptesTuiles();
+  const filtre = $('#filtreCompte').value;
+  const [y, m] = moisJournal || [Number(jour.slice(0, 4)), Number(jour.slice(5, 7))];
+  const finMois = ymd(y, m, joursDansMois(y, m));
+  const libFin = '<span class="long">pointé au ' + joursDansMois(y, m) + ' ' + MOIS[m - 1] + '</span><span class="court">pointé ' + joursDansMois(y, m) + '/' + String(m).padStart(2, '0') + '</span>';
   $('#tuilesPointage').innerHTML = noms.map((nom, i) => {
     const c = data.Comptes.find(x => x.nom === nom);
-    const v = c ? soldesCompte(c, jour).pointeTotal : 0;
+    const actif = filtre === nom;
+    const v = c ? (actif ? pointeAu(c, finMois) : soldesCompte(c, jour).pointeTotal) : 0;
     const change = dernieresValeursTuiles[i] !== undefined && dernieresValeursTuiles[nom + i] !== v;
     dernieresValeursTuiles[i] = true; dernieresValeursTuiles[nom + i] = v;
     const coul = couleurCompte(nom);
-    return '<button type="button" class="tuile' + (change ? ' maj' : '') + '" data-index="' + i + '"' + (coul ? ' style="--c:' + esc(coul) + '"' : '') + '>' +
-      '<span class="n"><i class="pastille-compte"></i><span class="nom-tuile">' + esc(nom) + '</span></span><span class="v' + (v < 0 ? ' neg' : '') + '">' + euros(v) + '</span><span class="p">pointé</span></button>';
+    const classes = 'tuile' + (change ? ' maj' : '') + (actif ? ' filtree' : '') + (filtre && !actif ? ' estompee' : '');
+    return '<button type="button" class="' + classes + '" data-index="' + i + '" data-nom="' + esc(nom) + '"' + (coul ? ' style="--c:' + esc(coul) + '"' : '') +
+      ' aria-pressed="' + actif + '" title="' + (actif ? 'Afficher tous les comptes' : 'N\'afficher que ' + esc(nom)) + '">' +
+      (actif ? '<span class="marque-filtre">' + ICONE_FILTRE_TUILE + '</span>' : '') +
+      '<span class="n"><i class="pastille-compte"></i><span class="nom-tuile">' + esc(nom) + '</span>' +
+      '<span class="changer-compte" role="button" tabindex="0" aria-label="Changer de compte" title="Changer de compte">' + ICONE_CHEVRON + '</span></span>' +
+      '<span class="v' + (v < 0 ? ' neg' : '') + '">' + euros(v) + '</span><span class="p">' + (actif ? libFin : 'pointé') + '</span></button>';
   }).join('');
-  $$('#tuilesPointage .tuile').forEach(t => t.onclick = () => ouvrirChoixCompte(Number(t.dataset.index)));
+  $$('#tuilesPointage .tuile').forEach(t => t.onclick = () => {
+    $('#filtreCompte').value = $('#filtreCompte').value === t.dataset.nom ? '' : t.dataset.nom;
+    rendreJournal();
+  });
+  $$('#tuilesPointage .changer-compte').forEach(b => {
+    const ouvrir = e => { e.stopPropagation(); e.preventDefault(); ouvrirChoixCompte(Number(b.closest('.tuile').dataset.index)); };
+    b.onclick = ouvrir;
+    b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') ouvrir(e); };
+  });
 }
 
 /** Fenêtre de choix des comptes additionnés dans la tuile Total (cases à cocher). */
@@ -417,7 +450,6 @@ function garderUnInstant(ids) {
 }
 
 function rendreJournal() {
-  rendreTuiles();
   if (!moisJournal) { const j = aujourdhui(); moisJournal = [Number(j.slice(0, 4)), Number(j.slice(5, 7))]; }
   const [y, m] = moisJournal;
   // Mois : libellé long sur PC, court sur mobile (« nov. 2026 »)
@@ -430,6 +462,7 @@ function rendreJournal() {
     data.Comptes.map(c => '<option>' + esc(c.nom) + '</option>').join('');
   sel.value = choix;
   const compte = sel.value;
+  rendreTuiles();
   const q = $('#recherche').value.trim().toLowerCase();
   const prefixe = ymd(y, m, 1).slice(0, 7);
 

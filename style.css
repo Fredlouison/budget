@@ -579,3 +579,24 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 .drapeau.actif svg { fill: currentColor; }
 .op.a-verifier { background: linear-gradient(0deg, rgba(255,214,10,.2), rgba(255,214,10,.2)), var(--carte) !important;
   border-color: rgba(255,214,10,.75) !important; box-shadow: 0 0 12px rgba(255,214,10,.22); }
+
+/* Tuiles du journal : appui = filtre sur le compte, chevron = changer de compte */
+.entete-journal .tuile { transition: transform .12s ease, border-color .12s ease, opacity .2s ease, box-shadow .2s ease; }
+.entete-journal .tuile .changer-compte { flex: 0 0 auto; margin-left: auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 22px; margin-right: -4px; border-radius: 7px; color: var(--discret); transition: background .12s ease, color .12s ease; }
+.entete-journal .tuile .changer-compte:hover { background: var(--carte2); color: var(--texte); }
+.entete-journal .tuile.filtree { border: 2px solid var(--c); padding: 8px 9px 7px 13px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent), 0 0 18px color-mix(in srgb, var(--c) 30%, transparent); }
+.entete-journal .tuile.filtree:hover { border-color: var(--c); }
+.entete-journal .tuile.filtree .p { color: var(--c); filter: brightness(1.35); }
+.entete-journal .tuile .marque-filtre { position: absolute; right: 8px; bottom: 7px; width: 22px; height: 22px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center; background: var(--c); color: #000; }
+.entete-journal .tuile.estompee { opacity: .42; }
+.entete-journal .tuile.estompee:hover { opacity: .75; }
+@media (max-width: 420px) { .entete-journal .tuile.filtree { padding-left: 10px; } .entete-journal .tuile .marque-filtre { right: 6px; bottom: 6px; width: 18px; height: 18px; } }
+.entete-journal .tuile .p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entete-journal .tuile .p .court { display: none; }
+@media (max-width: 699px) {
+  .entete-journal .tuile .p .long { display: none; } .entete-journal .tuile .p .court { display: inline; }
+  .entete-journal .tuile .marque-filtre { display: none; }
+}
