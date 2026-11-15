@@ -612,3 +612,11 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 .entete-journal .tuile .n { width: 100%; }
 .entete-journal .tuile .nom-tuile { flex: 1 1 0; }
 .entete-journal .tuile .v { overflow: hidden; text-overflow: clip; }
+
+/* iPhone : Safari zoome sur tout champ en dessous de 16 px → tous les champs à 16 px sur écran tactile */
+@media (pointer: coarse), (max-width: 699px) {
+  input, select, textarea,
+  #formulaire .champ input, #formulaire .champ select, #formulaire .champ textarea,
+  #formulaire .ligne-ventilation input, #formulaire .ligne-ventilation select,
+  .barre-date input[type=date], .date-pc input { font-size: 16px !important; }
+}
