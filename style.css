@@ -628,3 +628,10 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
   .ligne-montant-date.mode-ventilation .barre-date .mini { flex: 0 0 40px; width: 40px; }
   .ligne-montant-date.mode-ventilation > .pilule { flex: 0 0 auto; }
 }
+
+/* iPhone : texte du champ date centré verticalement (Safari le posait en bas) */
+@media (max-width: 699px) {
+  #formulaire .barre-date input[type=date] { display: flex !important; align-items: center; line-height: normal !important; padding-top: 0; padding-bottom: 0; }
+  #formulaire .barre-date input[type=date]::-webkit-date-and-time-value { margin: 0; padding: 0; line-height: normal; min-height: 0; text-align: left; }
+  #formulaire .barre-date input[type=date]::-webkit-datetime-edit { padding: 0; line-height: normal; }
+}
