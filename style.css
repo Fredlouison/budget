@@ -630,8 +630,13 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 }
 
 /* iPhone : texte du champ date centré verticalement (Safari le posait en bas) */
-@media (max-width: 699px) {
+@supports (-webkit-touch-callout: none) { @media (max-width: 699px) {
   #formulaire .barre-date input[type=date] { display: flex !important; align-items: center; line-height: normal !important; padding-top: 0; padding-bottom: 0; }
   #formulaire .barre-date input[type=date]::-webkit-date-and-time-value { margin: 0; padding: 0; line-height: normal; min-height: 0; text-align: left; }
   #formulaire .barre-date input[type=date]::-webkit-datetime-edit { padding: 0; line-height: normal; }
-}
+} }
+
+/* Saisie : Dépense / Recette / Mouvement / Retrait partout (PC et mobile) */
+.segment { grid-template-columns: repeat(4, 1fr); }
+.segment .pc-seul { display: block; }
+@media (max-width: 699px) { #formulaire .segment button { padding: 7px 2px; font-size: 13px; white-space: nowrap; } }
