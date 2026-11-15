@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.24.0';
+const VERSION_APP = '1.24.1';
 const VERSION_SCRIPT_ATTENDUE = '2.3.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -40,7 +40,8 @@ let favorisOuverts = false;
 let idsSurlignes = new Set();
 let groupesOuverts = new Set();
 const sortants = new Map();   // lignes qui viennent de changer de pointage : visibles encore un instant
-const FILTRES_POINTAGE = { toutes: ['◐', 'Toutes les opérations'], apointer: ['○', 'À pointer'], pointees: ['●', 'Pointées'] };   // dépenses ventilées dépliées dans le journal   // lignes à mettre en évidence dans le journal après un enregistrement
+const FILTRES_POINTAGE = { toutes: ['Toutes les opérations'], apointer: ['À pointer'], pointees: ['Pointées'] };
+const ICONE_FILTRE = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3.5 5h17l-6.5 7.6V19l-4 1.8v-8.2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';   // dépenses ventilées dépliées dans le journal   // lignes à mettre en évidence dans le journal après un enregistrement
 
 function videData() {
   const d = {}; Object.keys(CLES).forEach(t => { d[t] = []; }); return d;
@@ -437,8 +438,10 @@ function rendreJournal() {
   // Filtre de pointage (◐ toutes / ○ à pointer / ● pointées)
   const fp = local.filtrePointage || 'toutes';
   const btnF = $('#filtrePointage');
-  btnF.textContent = FILTRES_POINTAGE[fp][0];
-  btnF.title = 'Filtre : ' + FILTRES_POINTAGE[fp][1] + ' (toucher pour changer)';
+  if (!btnF.firstElementChild) btnF.innerHTML = ICONE_FILTRE;
+  btnF.title = 'Filtre : ' + FILTRES_POINTAGE[fp][0] + ' (toucher pour changer)';
+  btnF.setAttribute('aria-label', btnF.title);
+  btnF.dataset.etat = fp;
   btnF.classList.toggle('actif', fp !== 'toutes');
   if (fp !== 'toutes') {
     const maintenantMs = Date.now();
@@ -1264,7 +1267,7 @@ function brancher() {
     ecrire(LS.local, local);
     sortants.clear();
     rendreJournal();
-    toast('Filtre : ' + FILTRES_POINTAGE[local.filtrePointage][1]);
+    toast('Filtre : ' + FILTRES_POINTAGE[local.filtrePointage][0]);
   };
   $('#recherche').oninput = rendreJournal;
 
