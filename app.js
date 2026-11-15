@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.28.2';
+const VERSION_APP = '1.29.0';
 const VERSION_SCRIPT_ATTENDUE = '2.4.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -516,6 +516,13 @@ function rendreJournal() {
     elements.push({ groupe: o.groupe, op: o, enfants });
   });
 
+  // Titre : « Enseigne — Désignation » (sauf détail d'un ticket ventilé, dont l'enseigne est déjà dans l'en-tête).
+  const titreOp = (o, extra) => {
+    const d = o.designation || o.sous_categorie || '';
+    if (extra || o.type === 'VIREMENT' || !o.enseigne) return d || o.enseigne || '';
+    if (!d || d.toLowerCase() === String(o.enseigne).toLowerCase()) return o.enseigne;
+    return o.enseigne + ' — ' + d;
+  };
   const ligneOp = (o, extra) => {
     const v = Number(o.montant) || 0;
     let montantAffiche = v, classe = v < 0 ? 'neg' : 'pos';
@@ -539,7 +546,7 @@ function rendreJournal() {
     const drapeau = '<button type="button" class="drapeau' + (verif ? ' actif' : '') + '" data-verif="' + esc(o.id) + '" title="' + (verif ? 'À vérifier (toucher pour retirer)' : 'Marquer à vérifier') + '" aria-label="À vérifier">' + ICONE_DRAPEAU + '</button>';
     return '<div class="op' + (vir ? ' virement' : '') + (verif ? ' a-verifier' : '') + ((sortants.get(o.id) || 0) > Date.now() ? ' sortante' : '') + (prevue && o.date > jour ? ' prevue' : '') + (idsSurlignes.has(o.id) ? ' surligne' : '') + '" data-id="' + esc(o.id) + '"' +
       (style ? ' style="' + esc(style) + '"' : '') + '>' + cases +
-      '<div class="lib"><div class="t">' + esc(o.designation || o.enseigne || o.sous_categorie) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' <span class="bulle-com" data-com="' + esc(o.commentaire) + '">💬</span>' : '') + '</div>' +
+      '<div class="lib"><div class="t">' + esc(titreOp(o, extra)) + (o.serie_id ? ' ↻' : '') + (o.commentaire ? ' <span class="bulle-com" data-com="' + esc(o.commentaire) + '">💬</span>' : '') + '</div>' +
       '<div class="s">' + sous + '</div></div>' +
       drapeau + '<div class="m ' + classe + '">' + euros(montantAffiche) + '</div>' + (vir ? caseArrivee : '') + '</div>';
   };
