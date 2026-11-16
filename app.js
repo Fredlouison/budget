@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.32.0';
+const VERSION_APP = '1.32.1';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -1080,8 +1080,14 @@ function enregistrer(ev) {
         { type, designation, enseigne: fiche.enseigne, categorie, sous_categorie: sous, compte, compte_vers: fiche.compte_vers,
           paiement: fiche.paiement, montant: fiche.montant }) });
     }
+    // Ticket ventilé : la date s'applique à toutes les lignes du ticket
+    const autresLignes = edition.groupe && date !== edition.date
+      ? data.Operations.filter(o => o.groupe === edition.groupe && o.id !== edition.id) : [];
+    const nouveauGroupe = muts[0].data.groupe || edition.groupe;
+    autresLignes.forEach(o => muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({ id: o.id, date },
+      edition.groupe.startsWith('T-') ? { groupe: nouveauGroupe } : {}) }));
     modifier(muts);
-    return terminerSaisie(date, 'Opération modifiée', [edition.id]);
+    return terminerSaisie(date, autresLignes.length ? 'Date changée sur les ' + (autresLignes.length + 1) + ' lignes du ticket' : 'Opération modifiée', [edition.id]);
   }
 
   // --- Nouvelle opération, éventuellement récurrente ---
