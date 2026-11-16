@@ -4,8 +4,8 @@
  */
 'use strict';
 
-const VERSION_APP = '1.30.0';
-const VERSION_SCRIPT_ATTENDUE = '2.4.0';
+const VERSION_APP = '1.31.0';
+const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
   Operations: ['id'], Series: ['id'], Comptes: ['nom'], Arretes: ['compte', 'annee', 'mois'],
@@ -181,7 +181,7 @@ async function synchroniser() {
     if (vueCourante === 'reglages') rendreReglages(e.message);
   } finally {
     syncEnCours = false; majEtatSync(derniereErreur);
-    if (outbox.length && navigator.onLine) setTimeout(synchroniser, 30000);
+    if (outbox.length && navigator.onLine) setTimeout(synchroniser, derniereErreur ? 30000 : 300);   // saisie faite pendant la synchro : on renvoie tout de suite
   }
 }
 
@@ -563,14 +563,14 @@ function rendreJournal() {
     const total = el.enfants.reduce((t, x) => t + (Number(x.montant) || 0), 0);
     const toutPointe = el.enfants.every(x => x.pointe);
     const ouvert = groupesOuverts.has(el.groupe);
-    const titre = [o.enseigne, o.groupe_libelle].filter(Boolean).join(' — ') || 'Dépense ventilée';
+    const titre = [...new Set([o.enseigne, o.groupe_libelle].filter(Boolean).map(String))].filter((t, i, a) => i === 0 || t.toLowerCase() !== a[0].toLowerCase()).join(' — ') || 'Opération ventilée';
     const surligne = el.enfants.some(x => idsSurlignes.has(x.id));
     const fondG = fondCompte(o.compte);
     const verifG = el.enfants.some(x => x.a_verifier);
     html += '<div class="op groupe' + (verifG ? ' a-verifier' : '') + (el.enfants.some(x => (sortants.get(x.id) || 0) > Date.now()) ? ' sortante' : '') + (!toutPointe && o.date > jour ? ' prevue' : '') + (surligne ? ' surligne' : '') + '" data-groupe="' + esc(el.groupe) + '"' +
       ((fondG || liseret(o.compte)) ? ' style="' + esc((fondG ? 'background:' + fondG + ';' : '') + liseret(o.compte)) + '"' : '') + '>' +
       '<input type="checkbox" class="coche" ' + (toutPointe ? 'checked' : '') + styleCase(o.compte) + ' aria-label="Pointée">' +
-      '<div class="lib"><div class="t"><span class="picto" title="Dépense ventilée">' + (ouvert ? '▾' : '▸') + ' ' + el.enfants.length + '</span>' + esc(titre) + (o.commentaire ? ' <span class="bulle-com" data-com="' + esc(o.commentaire) + '">💬</span>' : '') + '</div>' +
+      '<div class="lib"><div class="t"><span class="picto" title="Opération ventilée">' + (ouvert ? '▾' : '▸') + ' ' + el.enfants.length + '</span>' + esc(titre) + (el.enfants.every(x => x.serie_id) ? ' ↻' : '') + (o.commentaire ? ' <span class="bulle-com" data-com="' + esc(o.commentaire) + '">💬</span>' : '') + '</div>' +
       '<div class="s">Ventilée · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '') + '</div></div>' +
       '<button type="button" class="drapeau' + (verifG ? ' actif' : '') + '" data-verif-groupe="' + esc(el.groupe) + '" title="' + (verifG ? 'À vérifier (toucher pour retirer)' : 'Marquer à vérifier') + '" aria-label="À vérifier">' + ICONE_DRAPEAU + '</button>' +
       '<div class="m ' + (total < 0 ? 'neg' : 'pos') + '">' + euros(total) + '</div></div>';
@@ -873,7 +873,6 @@ function basculerVentilation() {
   $('#blocCategorie').hidden = on;
   $('#champMontant').hidden = on;
   $('#champDesignation').hidden = on;
-  $('#champFrequence').hidden = on;
   if (on && !$('#lignesVentilation').children.length) {
     const premiere = ajouterLigneVentilation(); ajouterLigneVentilation();
     $('.v-designation', premiere).focus();
@@ -925,6 +924,12 @@ function occurrencesSerie(serie, annee) {
   return res;
 }
 
+/** Ticket commun : les échéances des séries de même « ticket », même compte et même date forment une ligne ventilée. */
+function groupeSerie(serie, date) {
+  const t = String((serie && serie.ticket) || '').trim();
+  return t ? { groupe: 'T-' + t.toLowerCase() + '|' + serie.compte + '|' + date, groupe_libelle: t } : { groupe: '', groupe_libelle: '' };
+}
+
 /** Échéances d'une série strictement après une date, sur l'année de cette date (et l'année suivante si déjà préparée). */
 function echeancesApres(serie, date, fiche) {
   const annee = Number(date.slice(0, 4));
@@ -933,7 +938,7 @@ function echeancesApres(serie, date, fiche) {
   const muts = [];
   annees.forEach(a => occurrencesSerie(serie, a).filter(d => d > date).forEach(d => {
     muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({}, fiche, {
-      id: nouvelId(), date: d, pointe: false, serie_id: serie.id, source: 'appli', commentaire: '' }) });
+      id: nouvelId(), date: d, pointe: false, serie_id: serie.id, source: 'appli', commentaire: '' }, groupeSerie(serie, d)) });
   }));
   return muts;
 }
@@ -991,6 +996,21 @@ function enregistrer(ev) {
         groupe, groupe_libelle: intitule }));
     });
     if (!ok) { signalerManquants(); return; }
+    const frequenceV = $('#frequence').value;
+    if (frequenceV !== 'UNE_FOIS') {                      // ticket ventilé récurrent : une série par ligne, même « ticket »
+      const ticket = intitule || commun.enseigne || 'Ticket';
+      const muts = [];
+      ops.forEach(o => {
+        const serie = { id: 'S-' + nouvelId(), type, designation: o.designation, enseigne: o.enseigne, categorie: o.categorie,
+          sous_categorie: o.sous_categorie, compte: o.compte, compte_vers: o.compte_vers || '', paiement: o.paiement, montant: o.montant,
+          frequence: frequenceV, jour: Number(date.slice(8, 10)), debut: date, fin: '', actif: true, ticket };
+        Object.assign(o, { serie_id: serie.id }, groupeSerie(serie, date));
+        const fiche = Object.assign({}, o); delete fiche.id; delete fiche.date; delete fiche.serie_id; delete fiche.groupe; delete fiche.groupe_libelle;
+        muts.push({ table: 'Series', op: 'upsert', data: serie }, { table: 'Operations', op: 'upsert', data: o }, ...echeancesApres(serie, date, fiche));
+      });
+      modifier(muts);
+      return terminerSaisie(date, ops.length + ' lignes récurrentes : ' + (muts.length - 2 * ops.length) + ' échéance(s) ajoutée(s)', ops.map(o => o.id));
+    }
     modifier(ops.map(o => ({ table: 'Operations', op: 'upsert', data: o })));
     return terminerSaisie(date, ops.length + ' lignes enregistrées', ops.map(o => o.id));
   }
@@ -1044,14 +1064,17 @@ function enregistrer(ev) {
     }
 
     // --- Modification simple ---
+    const serieEd = edition.serie_id && data.Series.find(x => x.id === edition.serie_id);
     const muts = [{ table: 'Operations', op: 'upsert', data: Object.assign({ id: edition.id, pointe: $('#pointe').checked },
-      type === 'VIREMENT' ? { pointe_vers: $('#pointeVers').checked } : {}, fiche) }];
+      type === 'VIREMENT' ? { pointe_vers: $('#pointeVers').checked } : {}, fiche,
+      serieEd && serieEd.ticket && (!edition.groupe || edition.groupe.startsWith('T-')) ? groupeSerie(Object.assign({}, serieEd, { compte }), date) : {}) }];
     if (edition.serie_id && $('#suivantes').checked) {
       const jour = Number(date.slice(8, 10));
       data.Operations.filter(o => o.serie_id === edition.serie_id && o.date > edition.date && !o.pointe).forEach(o => {
         const [y, m] = o.date.split('-').map(Number);
         muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({}, fiche, {
-          id: o.id, date: ymd(y, m, Math.min(jour, joursDansMois(y, m))), commentaire: o.commentaire }) });
+          id: o.id, date: ymd(y, m, Math.min(jour, joursDansMois(y, m))), commentaire: o.commentaire },
+          o.groupe && !o.groupe.startsWith('T-') ? {} : groupeSerie(Object.assign({}, data.Series.find(x => x.id === edition.serie_id), { compte }), ymd(y, m, Math.min(jour, joursDansMois(y, m))))) });
       });
       muts.push({ table: 'Series', op: 'upsert', data: Object.assign({ id: edition.serie_id, jour },
         { type, designation, enseigne: fiche.enseigne, categorie, sous_categorie: sous, compte, compte_vers: fiche.compte_vers,
@@ -1071,7 +1094,7 @@ function enregistrer(ev) {
   }
   const serie = Object.assign({ id: 'S-' + nouvelId(), frequence, jour: Number(date.slice(8, 10)), debut: date, fin: '', actif: true }, fiche);
   delete serie.date; delete serie.commentaire;
-  const premiere = { table: 'Operations', op: 'upsert', data: Object.assign({}, fiche, { id: nouvelId(), date, pointe: false, serie_id: serie.id, source: 'appli' }) };
+  const premiere = { table: 'Operations', op: 'upsert', data: Object.assign({}, fiche, { id: nouvelId(), date, pointe: false, serie_id: serie.id, source: 'appli' }, groupeSerie(serie, date)) };
   const muts = [{ table: 'Series', op: 'upsert', data: serie }, premiere].concat(echeancesApres(serie, date, fiche));
   modifier(muts);
   terminerSaisie(date, (muts.length - 1) + ' échéance(s) créée(s)', muts.filter(m => m.table === 'Operations' && m.data.date === date).map(m => m.data.id));
@@ -1199,12 +1222,26 @@ function rendreReglages(erreur) {
   });
 
   const nomsFreq = { MENSUEL: 'mensuel', BIMESTRIEL: 'bimestriel', TRIMESTRIEL: 'trimestriel', QUADRIMESTRIEL: 'quadrimestriel', SEMESTRIEL: 'semestriel', ANNUEL: 'annuel' };
-  $('#listeSeries').innerHTML = '<p class="discret">Désactive celles qui ne doivent pas se répéter l\'an prochain.</p>' +
+  $('#listeSeries').innerHTML = '<p class="discret">Désactive celles qui ne doivent pas se répéter l\'an prochain. Donne le même <b>ticket</b> à plusieurs récurrentes versées ensemble (ex. Caf) : elles formeront une seule ligne ventilée.</p>' +
     data.Series.slice().sort((a, b) => (b.actif === true) - (a.actif === true) || a.designation.localeCompare(b.designation, 'fr')).map(s =>
       '<div class="item' + (s.actif ? '' : ' inactif') + '"><span>' + esc(s.designation) + '<span class="sous">' + (nomsFreq[s.frequence] || s.frequence) +
       ' · le ' + s.jour + ' · ' + euros(s.montant) + (s.fin ? ' · jusqu\'au ' + s.fin.split('-').reverse().join('/') : '') + '</span></span>' +
+      '<input class="ticket-serie" data-ticket="' + esc(s.id) + '" list="listeTickets" placeholder="Ticket" value="' + esc(s.ticket || '') + '" title="Même ticket = une seule ligne ventilée dans le journal" aria-label="Ticket commun">' +
       '<button type="button" data-serie="' + esc(s.id) + '">' + (s.actif ? 'Désactiver' : 'Activer') + '</button></div>'
-    ).join('');
+    ).join('') +
+    '<datalist id="listeTickets">' + [...new Set(data.Series.map(x => String(x.ticket || '').trim()).filter(Boolean))].sort().map(t => '<option value="' + esc(t) + '">').join('') + '</datalist>';
+  $$('[data-ticket]').forEach(inp => inp.onchange = () => {
+    const s = data.Series.find(x => x.id === inp.dataset.ticket);
+    const ticket = majusculesMots(inp.value.trim());
+    if (ticket === String(s.ticket || '')) return;
+    const muts = [{ table: 'Series', op: 'upsert', data: { id: s.id, ticket } }];
+    const serie = Object.assign({}, s, { ticket });
+    data.Operations.filter(o => o.serie_id === s.id && (!o.groupe || o.groupe.startsWith('T-'))).forEach(o => {
+      muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({ id: o.id }, groupeSerie(Object.assign({}, serie, { compte: o.compte }), o.date)) });
+    });
+    modifier(muts);
+    toast(ticket ? '« ' + s.designation + ' » rattachée au ticket ' + ticket : 'Ticket retiré de « ' + s.designation + ' »');
+  });
   $$('[data-serie]').forEach(b => b.onclick = () => {
     const s = data.Series.find(x => x.id === b.dataset.serie);
     modifier([{ table: 'Series', op: 'upsert', data: { id: s.id, actif: !s.actif } }]);

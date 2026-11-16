@@ -640,3 +640,14 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 .segment { grid-template-columns: repeat(4, 1fr); }
 .segment .pc-seul { display: block; }
 @media (max-width: 699px) { #formulaire .segment button { padding: 7px 2px; font-size: 13px; white-space: nowrap; } }
+
+/* Réglages : ticket commun des opérations récurrentes */
+#listeSeries .item > span:first-child { flex: 1 1 auto; min-width: 0; }
+#listeSeries .ticket-serie { flex: 0 0 120px; width: 120px; height: 32px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--bord);
+  background: var(--carte2); color: var(--texte); font: inherit; font-size: 13px; }
+#listeSeries .ticket-serie:not(:placeholder-shown) { border-color: rgba(0,180,255,.7); color: #7fd8ff; box-shadow: 0 0 8px rgba(0,180,255,.18); }
+#listeSeries .ticket-serie:focus { outline: none; border-color: var(--bleu); }
+@media (max-width: 699px) { #listeSeries .ticket-serie { flex-basis: 92px; width: 92px; } }
+#listeSeries .item > button { flex: 0 0 92px; width: 92px; }
+@media (max-width: 699px) { #listeSeries .ticket-serie { flex-basis: 118px; width: 118px; padding: 0 8px; } #listeSeries .item > button { flex-basis: 84px; width: 84px; } }
+#listeSeries .ticket-serie::-webkit-calendar-picker-indicator { display: none !important; }

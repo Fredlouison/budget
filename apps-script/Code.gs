@@ -9,7 +9,7 @@
  * Enseignes, Paiements, Favoris, Parametres.
  */
 
-const VERSION_API = '2.4.0';
+const VERSION_API = '2.5.0';
 const CLE_TOKEN = 'BUDGET_TOKEN';
 
 const TABLES = {
@@ -23,7 +23,7 @@ const TABLES = {
   Series: {
     cle: ['id'],
     colonnes: ['id', 'type', 'designation', 'enseigne', 'categorie', 'sous_categorie', 'compte',
-      'compte_vers', 'paiement', 'frequence', 'jour', 'montant', 'debut', 'fin', 'actif'],
+      'compte_vers', 'paiement', 'frequence', 'jour', 'montant', 'debut', 'fin', 'actif', 'ticket'],
     dates: ['debut', 'fin'], booleens: ['actif'], nombres: ['jour', 'montant']
   },
   Comptes: {
@@ -245,7 +245,8 @@ function genererAnnee(annee) {
             date: date, type: s.type, designation: s.designation, enseigne: s.enseigne,
             categorie: s.categorie, sous_categorie: s.sous_categorie, compte: s.compte,
             compte_vers: s.compte_vers, paiement: s.paiement, montant: s.montant,
-            pointe: false, commentaire: '', serie_id: s.id, source: 'serie ' + annee
+            pointe: false, commentaire: '', serie_id: s.id, source: 'serie ' + annee,
+            groupe: groupeSerie_(s, date), groupe_libelle: s.ticket ? String(s.ticket) : ''
           }
         });
       });
@@ -268,6 +269,12 @@ function genererAnnee(annee) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/** Ticket commun : les échéances des séries qui partagent le même « ticket », même compte et même date forment une ligne ventilée. */
+function groupeSerie_(s, date) {
+  const t = String(s.ticket || '').trim();
+  return t ? 'T-' + t.toLowerCase() + '|' + s.compte + '|' + date : '';
 }
 
 /** Dates 'yyyy-MM-dd' des échéances d'une série tombant dans l'année donnée. */
