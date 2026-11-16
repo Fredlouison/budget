@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.31.0';
+const VERSION_APP = '1.32.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -1127,10 +1127,50 @@ function revenirAuJournal(ligneCible) {
   else if (ligneCible) { const l = $(ligneCible); if (l) l.scrollIntoView({ block: 'center' }); }
 }
 
-function supprimerOperation() {
+/**
+ * Fenêtre de dialogue aux couleurs de l'appli (remplace confirm/prompt du navigateur).
+ * dialogue({ titre, message, champs: [{ label, valeur, placeholder }], ok, danger }) →
+ *   confirmation : true / false ; avec champs : tableau des valeurs saisies, ou null si annulé.
+ */
+const ICONES_DLG = {
+  danger: '<svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  saisie: '<svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  info: '<svg viewBox="0 0 24 24" width="26" height="26"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v5M12 8h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>'
+};
+function dialogue(o) {
+  return new Promise(resoudre => {
+    const fen = $('#dialogue'), champs = o.champs || [];
+    fen.classList.toggle('danger', !!o.danger);
+    $('#dlgIcone').innerHTML = ICONES_DLG[o.danger ? 'danger' : champs.length ? 'saisie' : 'info'];
+    $('#dlgTitre').textContent = o.titre || '';
+    $('#dlgMessage').textContent = o.message || ''; $('#dlgMessage').hidden = !o.message;
+    $('#dlgChamps').innerHTML = champs.map((c, i) => '<label class="champ">' + esc(c.label) +
+      '<input class="majuscules" autocapitalize="words" autocomplete="off" data-dlg="' + i + '" placeholder="' + esc(c.placeholder || '') + '" value="' + esc(c.valeur || '') + '"></label>').join('');
+    $('#dlgOk').textContent = o.ok || 'OK';
+    fen.hidden = false;
+    const premier = $('#dlgChamps input');
+    setTimeout(() => (premier ? (premier.focus(), premier.select()) : $('#dlgOk').focus()), 30);
+    const fermer = v => { fen.hidden = true; $('#dlgForm').onsubmit = $('#dlgAnnuler').onclick = fen.onclick = document.onkeydown = null; resoudre(v); };
+    $('#dlgForm').onsubmit = e => {
+      e.preventDefault();
+      if (!champs.length) return fermer(true);
+      const vals = $$('#dlgChamps input').map(i => majusculesMots(i.value.trim()));
+      const vide = vals.findIndex(v => !v);
+      if (vide >= 0) { const i = $$('#dlgChamps input')[vide]; i.classList.add('invalide'); i.focus(); return; }
+      fermer(vals);
+    };
+    $('#dlgAnnuler').onclick = () => fermer(champs.length ? null : false);
+    fen.onclick = e => { if (e.target === fen) fermer(champs.length ? null : false); };
+    document.onkeydown = e => { if (e.key === 'Escape') fermer(champs.length ? null : false); };
+  });
+}
+
+async function supprimerOperation() {
   if (!edition) return;
   const serie = edition.serie_id && $('#suivantes').checked;
-  if (!confirm(serie ? 'Supprimer cette échéance et toutes les suivantes non pointées ?' : 'Supprimer cette opération ?')) return;
+  if (!await dialogue(serie
+    ? { titre: 'Supprimer les échéances', message: 'Cette échéance et toutes les suivantes non pointées seront supprimées. La récurrence s\'arrêtera la veille.', ok: 'Supprimer', danger: true }
+    : { titre: 'Supprimer l\'opération', message: (edition.designation || 'Cette opération') + ' · ' + euros(edition.montant) + ' sera supprimée.', ok: 'Supprimer', danger: true })) return;
   const muts = [{ table: 'Operations', op: 'delete', data: { id: edition.id } }];
   if (serie) {
     data.Operations.filter(o => o.serie_id === edition.serie_id && o.date > edition.date && !o.pointe)
@@ -1143,31 +1183,33 @@ function supprimerOperation() {
   revenirAuJournal();
 }
 
-function enregistrerFavori() {
+async function enregistrerFavori() {
   const designation = $('#designation').value.trim();
   const categorie = $('#categorie').value, sous = $('#sous_categorie').value;
   if (typeCourant === 'VIREMENT' || typeCourant === 'RETRAIT' || !categorie || !sous) { toast('Choisis au moins une catégorie et une sous-catégorie.', true); return; }
-  const nom = majusculesMots(prompt('Nom du favori :', designation || sous) || '');
-  if (!nom) return;
+  const r = await dialogue({ titre: 'Nouveau favori', champs: [{ label: 'Nom du favori', valeur: designation || sous }], ok: 'Ajouter' });
+  if (!r) return; const nom = r[0];
   modifier([{ table: 'Favoris', op: 'upsert', data: { id: nouvelId(), nom: nom.trim(), type: typeCourant, designation: designation || sous,
     enseigne: $('#enseigne').value, categorie, sous_categorie: sous, compte: $('#compte').value, paiement: $('#paiement').value, utilisations: 0 } }]);
   rendreRaccourcis();
   toast('Favori ajouté');
 }
 
-function ajouterReference(quoi) {
+async function ajouterReference(quoi) {
   if (quoi === 'enseigne') {
-    const nom = majusculesMots((prompt('Nouvelle enseigne :') || '').trim()); if (!nom) return;
+    const r = await dialogue({ titre: 'Nouvelle enseigne', champs: [{ label: 'Enseigne', placeholder: 'Ex : Carrefour' }], ok: 'Ajouter' }); if (!r) return;
+    const nom = r[0];
     modifier([{ table: 'Enseignes', op: 'upsert', data: { enseigne: nom } }]);
     remplirSelect($('#enseigne'), trierFr(data.Enseignes.map(e => e.enseigne)), '—', nom);
   } else if (quoi === 'categorie') {
-    const nom = majusculesMots((prompt('Nouvelle catégorie :') || '').trim()); if (!nom) return;
-    const sc = majusculesMots((prompt('Première sous-catégorie de « ' + nom + ' » :') || '').trim()); if (!sc) return;
+    const r = await dialogue({ titre: 'Nouvelle catégorie', champs: [{ label: 'Catégorie', placeholder: 'Ex : Loisirs' }, { label: 'Première sous-catégorie', placeholder: 'Ex : Cinéma' }], ok: 'Ajouter' }); if (!r) return;
+    const [nom, sc] = r;
     modifier([{ table: 'Categories', op: 'upsert', data: { categorie: nom, sous_categorie: sc } }]);
     remplirSelect($('#categorie'), listeCategories(), '— choisir —', nom); chargerSousCategories(sc);
   } else {
     const cat = $('#categorie').value; if (!cat) { toast('Choisis d\'abord une catégorie.', true); return; }
-    const sc = majusculesMots((prompt('Nouvelle sous-catégorie de « ' + cat + ' » :') || '').trim()); if (!sc) return;
+    const r = await dialogue({ titre: 'Nouvelle sous-catégorie', message: 'Dans la catégorie « ' + cat + ' »', champs: [{ label: 'Sous-catégorie', placeholder: 'Ex : Cinéma' }], ok: 'Ajouter' }); if (!r) return;
+    const sc = r[0];
     modifier([{ table: 'Categories', op: 'upsert', data: { categorie: cat, sous_categorie: sc } }]);
     chargerSousCategories(sc);
   }
@@ -1213,12 +1255,15 @@ function rendreReglages(erreur) {
     '<div class="item"><span>' + esc(f.nom) + '<span class="sous">' + esc([f.categorie, f.sous_categorie, f.compte].filter(Boolean).join(' › ')) + '</span></span>' +
     '<span><button type="button" data-renommer="' + esc(f.id) + '">Renommer</button> <button type="button" data-suppr-fav="' + esc(f.id) + '">✕</button></span></div>'
   ).join('') || '<p class="discret">Aucun favori.</p>';
-  $$('[data-renommer]').forEach(b => b.onclick = () => {
-    const f = data.Favoris.find(x => x.id === b.dataset.renommer); const nom = majusculesMots((prompt('Nouveau nom :', f.nom) || '').trim());
-    if (nom) modifier([{ table: 'Favoris', op: 'upsert', data: { id: f.id, nom } }]);
+  $$('[data-renommer]').forEach(b => b.onclick = async () => {
+    const f = data.Favoris.find(x => x.id === b.dataset.renommer);
+    const r = await dialogue({ titre: 'Renommer le favori', champs: [{ label: 'Nom', valeur: f.nom }], ok: 'Renommer' }); if (!r) return;
+    const nom = r[0];
+    modifier([{ table: 'Favoris', op: 'upsert', data: { id: f.id, nom } }]);
   });
-  $$('[data-suppr-fav]').forEach(b => b.onclick = () => {
-    if (confirm('Supprimer ce favori ?')) modifier([{ table: 'Favoris', op: 'delete', data: { id: b.dataset.supprFav } }]);
+  $$('[data-suppr-fav]').forEach(b => b.onclick = async () => {
+    const f = data.Favoris.find(x => x.id === b.dataset.supprFav);
+    if (await dialogue({ titre: 'Supprimer le favori', message: '« ' + (f ? f.nom : '') + ' » sera retiré de tes favoris.', ok: 'Supprimer', danger: true })) modifier([{ table: 'Favoris', op: 'delete', data: { id: b.dataset.supprFav } }]);
   });
 
   const nomsFreq = { MENSUEL: 'mensuel', BIMESTRIEL: 'bimestriel', TRIMESTRIEL: 'trimestriel', QUADRIMESTRIEL: 'quadrimestriel', SEMESTRIEL: 'semestriel', ANNUEL: 'annuel' };
@@ -1330,11 +1375,11 @@ function enregistrerFicheCompte() {
   toast(compteEdite ? 'Compte modifié' : 'Compte ajouté');
 }
 
-function supprimerFicheCompte() {
+async function supprimerFicheCompte() {
   const c = compteEdite; if (!c) return;
   const n = utilisationsCompte(c.nom);
   if (n) { $('#fcErreur').textContent = n + ' opération(s) utilisent ce compte : il ne peut pas être supprimé. Décoche « Compte actif » pour le masquer.'; return; }
-  if (!confirm('Supprimer définitivement le compte « ' + c.nom + ' » ?')) return;
+  if (!await dialogue({ titre: 'Supprimer le compte', message: 'Le compte « ' + c.nom + ' » sera supprimé définitivement.', ok: 'Supprimer', danger: true })) return;
   const muts = [{ table: 'Comptes', op: 'delete', data: { nom: c.nom } }];
   if (couleurCompte(c.nom)) muts.push({ table: 'Parametres', op: 'delete', data: { cle: 'couleur:' + c.nom } });
   modifier(muts);
@@ -1420,8 +1465,8 @@ function brancher() {
     try { await synchroniser(); const r = await api('genererAnnee', { annee: an }); toast(r.creees + ' échéance(s) ' + an + ' créée(s)'); await synchroniser(); }
     catch (e) { toast(e.message, true); }
   };
-  $('#btnRecharger').onclick = () => {
-    if (outbox.length && !confirm(outbox.length + ' modification(s) pas encore envoyée(s). Elles seront conservées et renvoyées. Continuer ?')) return;
+  $('#btnRecharger').onclick = async () => {
+    if (outbox.length && !await dialogue({ titre: 'Recharger depuis Google', message: outbox.length + ' modification(s) pas encore envoyée(s). Elles seront conservées et renvoyées.', ok: 'Continuer' })) return;
     synchroniser();
   };
 

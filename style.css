@@ -651,3 +651,22 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 #listeSeries .item > button { flex: 0 0 92px; width: 92px; }
 @media (max-width: 699px) { #listeSeries .ticket-serie { flex-basis: 118px; width: 118px; padding: 0 8px; } #listeSeries .item > button { flex-basis: 84px; width: 84px; } }
 #listeSeries .ticket-serie::-webkit-calendar-picker-indicator { display: none !important; }
+
+/* Fenêtre de dialogue (remplace les pop-up du navigateur) */
+.modal.dialogue { align-items: center; padding: 20px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 40; }
+.dialogue .feuille { max-width: 400px; border-radius: 20px; padding: 22px 20px 18px; text-align: center; border: 1px solid var(--bord);
+  box-shadow: 0 20px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(0,255,127,.08); animation: dlgEntree .18s ease-out; }
+@keyframes dlgEntree { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
+.dlg-icone { width: 52px; height: 52px; margin: 0 auto 12px; border-radius: 16px; display: flex; align-items: center; justify-content: center;
+  color: var(--vert); background: rgba(0,255,127,.1); box-shadow: 0 0 22px rgba(0,255,127,.18); }
+.dialogue.danger .dlg-icone { color: var(--rouge); background: rgba(255,77,109,.12); box-shadow: 0 0 22px rgba(255,77,109,.22); }
+.dialogue h2 { margin: 0 0 6px; font-size: 18px; font-weight: 800; }
+.dialogue #dlgMessage { margin: 0 0 4px; color: var(--discret); font-size: 14px; line-height: 1.45; }
+.dialogue #dlgChamps { text-align: left; margin-top: 12px; }
+.dialogue #dlgChamps .champ { display: block; margin-bottom: 10px; }
+.dlg-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.dlg-actions button { width: 100% !important; margin: 0 !important; height: 44px; border-radius: 12px; font-weight: 800; font-size: 15px; }
+.dialogue.danger #dlgOk { background: var(--rouge); border-color: var(--rouge); color: #fff; box-shadow: 0 0 18px rgba(255,77,109,.35); }
+.dlg-actions button:focus { outline: none; }
+.dlg-actions button:focus-visible { box-shadow: 0 0 0 3px rgba(0,255,127,.35); }
+.dialogue.danger #dlgOk:focus-visible { box-shadow: 0 0 0 3px rgba(255,77,109,.4), 0 0 18px rgba(255,77,109,.35); }

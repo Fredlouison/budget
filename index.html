@@ -217,6 +217,19 @@
     </div>
   </div>
 
+  <div id="dialogue" class="modal dialogue" hidden role="dialog" aria-modal="true" aria-labelledby="dlgTitre">
+    <form class="feuille" id="dlgForm" novalidate>
+      <div class="dlg-icone" id="dlgIcone" aria-hidden="true"></div>
+      <h2 id="dlgTitre"></h2>
+      <p id="dlgMessage"></p>
+      <div id="dlgChamps"></div>
+      <div class="dlg-actions">
+        <button type="button" class="secondaire" id="dlgAnnuler">Annuler</button>
+        <button type="submit" class="principal" id="dlgOk">OK</button>
+      </div>
+    </form>
+  </div>
+
   <div id="ficheCompte" class="modal" hidden>
     <div class="feuille">
       <h2 id="titreFicheCompte">Compte</h2>
