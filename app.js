@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.32.1';
+const VERSION_APP = '1.33.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -1080,14 +1080,20 @@ function enregistrer(ev) {
         { type, designation, enseigne: fiche.enseigne, categorie, sous_categorie: sous, compte, compte_vers: fiche.compte_vers,
           paiement: fiche.paiement, montant: fiche.montant }) });
     }
-    // Ticket ventilé : la date s'applique à toutes les lignes du ticket
-    const autresLignes = edition.groupe && date !== edition.date
+    // Ticket ventilé : date, compte et paiement sont communs à toutes les lignes du ticket
+    const communs = {};
+    if (date !== edition.date) communs.date = date;
+    if (fiche.compte !== edition.compte) communs.compte = fiche.compte;
+    if ((fiche.paiement || '') !== (edition.paiement || '')) communs.paiement = fiche.paiement;
+    const autresLignes = edition.groupe && Object.keys(communs).length
       ? data.Operations.filter(o => o.groupe === edition.groupe && o.id !== edition.id) : [];
     const nouveauGroupe = muts[0].data.groupe || edition.groupe;
-    autresLignes.forEach(o => muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({ id: o.id, date },
+    autresLignes.forEach(o => muts.push({ table: 'Operations', op: 'upsert', data: Object.assign({ id: o.id }, communs,
       edition.groupe.startsWith('T-') ? { groupe: nouveauGroupe } : {}) }));
     modifier(muts);
-    return terminerSaisie(date, autresLignes.length ? 'Date changée sur les ' + (autresLignes.length + 1) + ' lignes du ticket' : 'Opération modifiée', [edition.id]);
+    const quoi = { date: 'Date', compte: 'Compte', paiement: 'Paiement' };
+    const libCommuns = Object.keys(communs).map(k => quoi[k]).join(', ').replace(/, ([^,]*)$/, ' et $1');
+    return terminerSaisie(date, autresLignes.length ? libCommuns + ' changé' + (Object.keys(communs).length > 1 ? 's' : '') + ' sur les ' + (autresLignes.length + 1) + ' lignes du ticket' : 'Opération modifiée', [edition.id]);
   }
 
   // --- Nouvelle opération, éventuellement récurrente ---
@@ -1407,6 +1413,13 @@ function brancher() {
   $('#fcAnnuler').onclick = () => { $('#ficheCompte').hidden = true; };
   $('#fcSupprimer').onclick = supprimerFicheCompte;
   $('#fcCouleur').addEventListener('input', e => { couleurChoisie = e.target.value; $('#fcSansCouleur').classList.remove('actif'); });
+  // Le clic qui ferme la palette de couleurs (Windows) retombait sur « Compte actif » juste en dessous : on l'ignore.
+  let paletteOuverte = false, paletteFermeeA = 0;
+  $('#fcCouleur').addEventListener('click', () => { paletteOuverte = true; });
+  ['change', 'blur'].forEach(ev => $('#fcCouleur').addEventListener(ev, () => { paletteOuverte = false; paletteFermeeA = Date.now(); }));
+  $('#fcActif').closest('label').addEventListener('click', e => {
+    if (paletteOuverte || Date.now() - paletteFermeeA < 600) { e.preventDefault(); e.stopPropagation(); paletteOuverte = false; }
+  }, true);
   $('#fcSansCouleur').onclick = () => { couleurChoisie = ''; $('#fcCouleur').value = '#ffffff'; $('#fcSansCouleur').classList.add('actif'); };
   $('#choixCompte').onclick = e => { if (e.target.id === 'choixCompte') $('#choixCompte').hidden = true; };
   $('#etatSync').onclick = () => synchroniser();
