@@ -749,3 +749,24 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 }
 
 .onglets button .ico-stats { display: flex; justify-content: center; align-items: center; height: 23px; }
+
+/* Tuiles du journal : choix du solde affiché (réel / fin de mois / pointé) */
+.entete-journal .tuile .mode-tuile { display: inline-flex; align-items: center; gap: 3px; padding: 1px 5px 1px 0; border-radius: 6px; cursor: pointer; transition: color .12s ease; }
+@media (hover: hover) { .entete-journal .tuile .mode-tuile:hover { color: var(--vert); } }
+.entete-journal .tuile .fl-mode { font-style: normal; font-size: 9px; opacity: .8; }
+.pager-tuiles { display: none; }
+@media (max-width: 699px) {
+  .pager-tuiles { grid-column: 1 / -1; display: flex; justify-content: center; gap: 6px; height: 6px; margin-top: 2px; }
+  .pager-tuiles i { width: 5px; height: 5px; border-radius: 999px; background: var(--bord); transition: all .2s ease; }
+  .pager-tuiles i.actif { width: 16px; background: var(--vert); box-shadow: 0 0 6px rgba(0,255,127,.55); }
+  .entete-journal .tuile .fl-mode { display: none; }
+}
+#tuilesPointage.glisse-g .tuile { animation: tuileG .22s ease-out; }
+#tuilesPointage.glisse-d .tuile { animation: tuileD .22s ease-out; }
+@keyframes tuileG { from { transform: translateX(14px); opacity: .4; } to { transform: none; opacity: 1; } }
+@keyframes tuileD { from { transform: translateX(-14px); opacity: .4; } to { transform: none; opacity: 1; } }
+.menu-mode-tuiles { position: fixed; z-index: 30; min-width: 210px; padding: 6px; border-radius: 12px; background: #0b0d10;
+  border: 1px solid rgba(0,255,127,.45); box-shadow: 0 10px 30px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 2px; animation: dlgEntree .15s ease-out; }
+.menu-mode-tuiles button { text-align: left; border: 0; background: none; color: var(--texte); font: inherit; font-size: 14px; padding: 9px 12px; border-radius: 8px; cursor: pointer; }
+.menu-mode-tuiles button:hover { background: var(--carte2); }
+.menu-mode-tuiles button.actif { background: rgba(0,255,127,.1); color: var(--vert); font-weight: 700; }

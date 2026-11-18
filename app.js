@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.34.0';
+const VERSION_APP = '1.35.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -367,17 +367,58 @@ function pointeAu(c, jour) {
   return Math.round(v * 100) / 100;
 }
 
+// Solde affiché dans les tuiles du journal : réel (aujourd'hui), fin du mois affiché, ou pointé.
+// Mobile : fin de mois à chaque ouverture, balayage gauche/droite pour changer. PC : pointé par défaut, choix mémorisé.
+const MODES_TUILES = ['reel', 'fin', 'pointe'];
+let modeTuilesMobile = 'fin';
+const estMobile = () => window.matchMedia('(max-width: 699px)').matches;
+const modeTuiles = () => estMobile() ? modeTuilesMobile : (MODES_TUILES.includes(local.modeTuilesPC) ? local.modeTuilesPC : 'pointe');
+function libelleModeTuiles(mode, y, m) {
+  if (mode === 'reel') return 'réel';
+  if (mode === 'pointe') return 'pointé';
+  return 'fin ' + new Date(y, m - 1, 1).toLocaleDateString('fr-FR', { month: 'short' });
+}
+function valeurTuile(c, mode, y, m) {
+  const jour = aujourdhui();
+  if (mode === 'reel') return soldesCompte(c, jour).aujourdhui;
+  if (mode === 'pointe') return soldesCompte(c, jour).pointeTotal;
+  const fin = ymd(y, m, joursDansMois(y, m));
+  return jour.slice(0, 7) === fin.slice(0, 7) ? soldesCompte(c, jour).finMois : soldesCompte(c, fin).aujourdhui;
+}
+function changerModeTuiles(mode, sens) {
+  if (estMobile()) modeTuilesMobile = mode; else { local.modeTuilesPC = mode; ecrire(LS.local, local); }
+  rendreTuiles();
+  const t = $('#tuilesPointage');
+  if (sens) { t.classList.remove('glisse-g', 'glisse-d'); void t.offsetWidth; t.classList.add(sens > 0 ? 'glisse-g' : 'glisse-d'); }
+}
+function menuModeTuiles(ancre) {
+  fermerMenuModeTuiles();
+  const [y, m] = moisJournal || [Number(aujourdhui().slice(0, 4)), Number(aujourdhui().slice(5, 7))];
+  const noms = { reel: 'Réel (aujourd\'hui)', fin: 'Fin de mois (' + MOIS[m - 1] + ')', pointe: 'Pointé' };
+  const menu = document.createElement('div');
+  menu.className = 'menu-mode-tuiles'; menu.id = 'menuModeTuiles';
+  menu.innerHTML = MODES_TUILES.map(md => '<button type="button" data-mode="' + md + '" class="' + (md === modeTuiles() ? 'actif' : '') + '">' + noms[md] + '</button>').join('');
+  document.body.appendChild(menu);
+  const r = ancre.getBoundingClientRect();
+  menu.style.left = Math.min(window.innerWidth - menu.offsetWidth - 8, Math.max(8, r.left)) + 'px';
+  menu.style.top = (r.bottom + 6) + 'px';
+  menu.onclick = e => { const b = e.target.closest('[data-mode]'); if (b) { fermerMenuModeTuiles(); changerModeTuiles(b.dataset.mode); } };
+  setTimeout(() => document.addEventListener('click', fermerMenuModeTuiles, { once: true }), 0);
+}
+function fermerMenuModeTuiles() { const mn = $('#menuModeTuiles'); if (mn) mn.remove(); }
+
 function rendreTuiles() {
   const jour = aujourdhui();
   const noms = comptesTuiles();
   const filtre = $('#filtreCompte').value;
   const [y, m] = moisJournal || [Number(jour.slice(0, 4)), Number(jour.slice(5, 7))];
   const finMois = ymd(y, m, joursDansMois(y, m));
+  const mode = modeTuiles(), libMode = libelleModeTuiles(mode, y, m);
   const libFin = '<span class="long">pointé au ' + joursDansMois(y, m) + ' ' + MOIS[m - 1] + '</span><span class="court">pointé ' + joursDansMois(y, m) + '/' + String(m).padStart(2, '0') + '</span>';
   $('#tuilesPointage').innerHTML = noms.map((nom, i) => {
     const c = data.Comptes.find(x => x.nom === nom);
     const actif = filtre === nom;
-    const v = c ? (actif ? pointeAu(c, finMois) : soldesCompte(c, jour).pointeTotal) : 0;
+    const v = c ? (actif ? pointeAu(c, finMois) : valeurTuile(c, mode, y, m)) : 0;
     const change = dernieresValeursTuiles[i] !== undefined && dernieresValeursTuiles[nom + i] !== v;
     dernieresValeursTuiles[i] = true; dernieresValeursTuiles[nom + i] = v;
     const coul = couleurCompte(nom);
@@ -387,9 +428,25 @@ function rendreTuiles() {
       (actif ? '<span class="marque-filtre">' + ICONE_FILTRE_TUILE + '</span>' : '') +
       '<span class="n"><i class="pastille-compte"></i><span class="nom-tuile">' + esc(nom) + '</span>' +
       '<span class="changer-compte" role="button" tabindex="0" aria-label="Changer de compte" title="Changer de compte">' + ICONE_CHEVRON + '</span></span>' +
-      '<span class="v' + (v < 0 ? ' neg' : '') + '">' + euros(v) + '</span><span class="p">' + (actif ? libFin : 'pointé') + '</span></button>';
-  }).join('');
+      '<span class="v' + (v < 0 ? ' neg' : '') + '">' + euros(v) + '</span><span class="p">' + (actif ? libFin : '<span class="mode-tuile" role="button" tabindex="0" title="Choisir le solde affiché">' + libMode + '<i class="fl-mode">▾</i></span>') + '</span></button>';
+  }).join('') + '<div class="pager-tuiles" aria-hidden="true">' + MODES_TUILES.map(md => '<i class="' + (md === mode ? 'actif' : '') + '"></i>').join('') + '</div>';
+  $$('#tuilesPointage .mode-tuile').forEach(el => el.onclick = e => { e.stopPropagation(); e.preventDefault(); menuModeTuiles(el); });
+  const zone = $('#tuilesPointage');
+  if (!zone.dataset.balayage) {
+    zone.dataset.balayage = '1';
+    let x0 = null, y0 = 0;
+    zone.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+    zone.addEventListener('touchend', e => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
+      if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      zone.dataset.balaye = Date.now();
+      const i = MODES_TUILES.indexOf(modeTuiles()), j = Math.max(0, Math.min(MODES_TUILES.length - 1, i + (dx < 0 ? 1 : -1)));
+      if (j !== i) changerModeTuiles(MODES_TUILES[j], dx < 0 ? 1 : -1);
+    }, { passive: true });
+  }
   $$('#tuilesPointage .tuile').forEach(t => t.onclick = () => {
+    if (Date.now() - Number(zone.dataset.balaye || 0) < 400) return;   // fin d'un balayage : pas un appui
     $('#filtreCompte').value = $('#filtreCompte').value === t.dataset.nom ? '' : t.dataset.nom;
     rendreJournal();
   });
