@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.33.0';
+const VERSION_APP = '1.34.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -261,6 +261,7 @@ function rendre() {
   if (vueCourante === 'accueil') rendreAccueil();
   if (vueCourante === 'journal') rendreJournal();
   if (vueCourante === 'reglages') rendreReglages();
+  if (vueCourante === 'stats') rendreStats();
   majEtatSync();
 }
 
@@ -269,7 +270,7 @@ function afficherVue(vue) {
   $$('.vue').forEach(s => { s.hidden = s.id !== 'vue-' + vue; });
   $$('.onglets button').forEach(b => b.classList.toggle('actif', b.dataset.vue === vue));
   document.body.classList.toggle('saisie', vue === 'saisie');
-  $('#titre').textContent = { accueil: 'Soldes', journal: 'Journal', saisie: edition ? 'Modifier' : 'Nouvelle opération', reglages: 'Réglages' }[vue];
+  $('#titre').textContent = { accueil: 'Soldes', journal: 'Journal', saisie: edition ? 'Modifier' : 'Nouvelle opération', reglages: 'Réglages', stats: 'Statistiques' }[vue];
   window.scrollTo(0, 0);
   rendre();
 }
@@ -1506,3 +1507,126 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
   }).catch(() => {});
 }
+
+/* ===================== STATISTIQUES ===================== */
+const COULEURS_STATS = ['#00ff7f', '#00b4ff', '#ff4d6d', '#ffd60a', '#b26bff', '#ff8c42', '#2ee6d6', '#ff5fd2'];
+let statCategorieOuverte = '';
+
+function statEtat() {
+  const j = aujourdhui();
+  if (!local.statPeriode) local.statPeriode = 'mois';
+  if (!local.statMois) local.statMois = [Number(j.slice(0, 4)), Number(j.slice(5, 7))];
+  return local;
+}
+
+/** Opérations prises en compte : dépenses et recettes (les mouvements entre comptes ne sont ni l'un ni l'autre). */
+function opsStats(debut, fin, compte) {
+  return data.Operations.filter(o => (o.type === 'DEPENSE' || o.type === 'RECETTE') && o.date >= debut && o.date <= fin && (!compte || o.compte === compte));
+}
+const sommeStats = (ops, type) => ops.filter(o => o.type === type).reduce((t, o) => t + (Number(o.montant) || 0), 0) * (type === 'DEPENSE' ? -1 : 1);
+
+function rendreStats() {
+  const st = statEtat();
+  const [y, m] = st.statMois;
+  const annee = st.statPeriode === 'annee';
+  $$('#segPeriode button').forEach(b => b.classList.toggle('actif', b.dataset.p === st.statPeriode));
+  $('#statLibelle').textContent = annee ? String(y) : MOIS[m - 1] + ' ' + y;
+  const sel = $('#statCompte'), choix = sel.value;
+  sel.innerHTML = '<option value="">Tous les comptes</option>' + data.Comptes.slice().sort((a, b) => (a.ordre || 0) - (b.ordre || 0))
+    .map(c => '<option>' + esc(c.nom) + '</option>').join('');
+  sel.value = choix; const compte = sel.value;
+  const debut = annee ? ymd(y, 1, 1) : ymd(y, m, 1), fin = annee ? ymd(y, 12, 31) : ymd(y, m, joursDansMois(y, m));
+  const ops = opsStats(debut, fin, compte);
+  const recettes = sommeStats(ops, 'RECETTE'), depenses = sommeStats(ops, 'DEPENSE'), net = recettes - depenses;
+  $('#statResume').innerHTML =
+    '<div class="carte stat-chiffre"><span class="lib">Recettes</span><b class="pos">' + euros(recettes) + '</b></div>' +
+    '<div class="carte stat-chiffre"><span class="lib">Dépenses</span><b class="neg">' + euros(depenses) + '</b></div>' +
+    '<div class="carte stat-chiffre"><span class="lib">' + (net >= 0 ? 'Épargne' : 'Déficit') + '</span><b class="' + (net >= 0 ? 'pos' : 'neg') + '">' + euros(net) + '</b></div>';
+  rendreBarresStats(y, annee ? 0 : m, compte);
+  rendreCategoriesStats(ops);
+}
+
+function rendreBarresStats(y, moisActif, compte) {
+  const mois = [];
+  for (let i = 1; i <= 12; i++) {
+    const ops = opsStats(ymd(y, i, 1), ymd(y, i, joursDansMois(y, i)), compte);
+    mois.push({ r: sommeStats(ops, 'RECETTE'), d: sommeStats(ops, 'DEPENSE') });
+  }
+  const max = Math.max(1, ...mois.map(x => Math.max(x.r, x.d)));
+  const pas = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 50000].find(p => max / p <= 4) || 100000;
+  const haut = Math.ceil(max / pas) * pas;
+  // 1 unité du dessin = 1 pixel à l'écran : textes nets et lisibles sur mobile comme sur PC
+  const W = Math.max(320, Math.round($('#statBarres').clientWidth || 700)), H = W < 500 ? 210 : 230, g = 38, bas = 24, col = (W - g - 2) / 12, b = Math.max(4, Math.min(18, col / 2 - 4)), hz = H - bas - 14;
+  const yv = v => 12 + hz - (Math.max(0, v) / haut) * hz;
+  const nomsCourts = W < 500 ? ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'] : ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="stat-svg" role="img" aria-label="Recettes et dépenses par mois">';
+  for (let v = 0; v <= haut; v += pas) {
+    svg += '<line x1="' + g + '" x2="' + W + '" y1="' + yv(v) + '" y2="' + yv(v) + '" class="grille"/>' +
+      '<text x="' + (g - 8) + '" y="' + (yv(v) + 4) + '" class="axe" text-anchor="end">' + (v >= 1000 ? (v / 1000).toLocaleString('fr-FR') + 'k' : v) + '</text>';
+  }
+  mois.forEach((x, i) => {
+    const x0 = g + 2 + i * col, cx = x0 + col / 2, actif = moisActif === i + 1, attenue = moisActif && !actif;
+    svg += '<g class="mois-barre' + (actif ? ' actif' : '') + (attenue ? ' attenue' : '') + '" data-mois="' + (i + 1) + '">' +
+      '<rect x="' + (x0 + 2) + '" y="4" width="' + (col - 4) + '" height="' + (H - 8) + '" rx="10" class="zone"/>' +
+      '<rect x="' + (cx - b - 1.5) + '" y="' + yv(x.r) + '" width="' + b + '" height="' + Math.max(0, yv(0) - yv(x.r)) + '" rx="4" class="b-rec"/>' +
+      '<rect x="' + (cx + 1.5) + '" y="' + yv(x.d) + '" width="' + b + '" height="' + Math.max(0, yv(0) - yv(x.d)) + '" rx="4" class="b-dep"/>' +
+      '<text x="' + cx + '" y="' + (H - 9) + '" class="axe mois" text-anchor="middle">' + nomsCourts[i] + '</text>' +
+      '<title>' + MOIS[i] + ' : recettes ' + euros(x.r) + ', dépenses ' + euros(x.d) + ', solde ' + euros(x.r - x.d) + '</title></g>';
+  });
+  $('#statBarres').innerHTML = svg + '</svg>' +
+    '<div class="stat-legende"><span><i class="puce-leg rec"></i>Recettes</span><span><i class="puce-leg dep"></i>Dépenses</span><span class="aide">Appuie sur un mois pour le détailler</span></div>';
+  $$('#statBarres .mois-barre').forEach(el => el.onclick = () => {
+    local.statPeriode = 'mois'; local.statMois = [y, Number(el.dataset.mois)]; ecrire(LS.local, local); rendreStats();
+  });
+}
+
+function rendreCategoriesStats(ops) {
+  const parCat = {};
+  ops.filter(o => o.type === 'DEPENSE').forEach(o => {
+    const c = o.categorie || 'Sans catégorie', s = o.sous_categorie || '—', v = -(Number(o.montant) || 0);
+    parCat[c] = parCat[c] || { total: 0, sous: {} };
+    parCat[c].total += v; parCat[c].sous[s] = (parCat[c].sous[s] || 0) + v;
+  });
+  const liste = Object.entries(parCat).map(([nom, x]) => ({ nom, total: x.total, sous: x.sous })).filter(x => x.total > 0.004).sort((a, b) => b.total - a.total);
+  const total = liste.reduce((t, x) => t + x.total, 0);
+  if (!total) { $('#statCategories').innerHTML = '<p class="vide-stats">Aucune dépense sur cette période.</p>'; return; }
+  liste.forEach((x, i) => { x.couleur = i < COULEURS_STATS.length ? COULEURS_STATS[i] : '#5b636d'; });
+  if (statCategorieOuverte && !liste.some(x => x.nom === statCategorieOuverte)) statCategorieOuverte = '';
+  const R = 74, C = 2 * Math.PI * R; let decal = 0;
+  let svg = '<svg viewBox="0 0 200 200" class="anneau" role="img" aria-label="Répartition des dépenses"><circle cx="100" cy="100" r="' + R + '" class="fond-anneau"/>';
+  liste.forEach(x => {
+    const l = x.total / total * C, ouvert = statCategorieOuverte === x.nom;
+    svg += '<circle cx="100" cy="100" r="' + R + '" class="part' + (statCategorieOuverte && !ouvert ? ' attenue' : '') + (ouvert ? ' ouverte' : '') + '" data-cat="' + esc(x.nom) + '" stroke="' + x.couleur +
+      '" stroke-dasharray="' + Math.max(0.5, l - (liste.length > 1 ? 2 : 0)).toFixed(2) + ' ' + C.toFixed(2) + '" stroke-dashoffset="' + (-decal).toFixed(2) + '" transform="rotate(-90 100 100)"><title>' +
+      esc(x.nom) + ' : ' + euros(x.total) + '</title></circle>';
+    decal += l;
+  });
+  const sel = liste.find(x => x.nom === statCategorieOuverte);
+  svg += '<text x="100" y="92" text-anchor="middle" class="anneau-lib">' + esc(sel ? sel.nom : 'Total') + '</text>' +
+    '<text x="100" y="118" text-anchor="middle" class="anneau-val">' + euros(sel ? sel.total : total) + '</text></svg>';
+  const pc = v => { const p = v * 100; return (p < 10 ? p.toFixed(1) : p.toFixed(0)).replace('.', ',') + ' %'; };
+  const lignes = liste.map(x => {
+    const ouvert = statCategorieOuverte === x.nom;
+    const sous = ouvert ? '<div class="stat-sous">' + Object.entries(x.sous).filter(([, v]) => v > 0.004).sort((a, b) => b[1] - a[1]).map(([n, v]) =>
+      '<div class="ligne-sous"><span class="n">' + esc(n) + '</span><span class="pc">' + pc(v / x.total) + '</span><b>' + euros(v) + '</b></div>').join('') + '</div>' : '';
+    return '<div class="stat-cat' + (ouvert ? ' ouverte' : '') + '" data-cat="' + esc(x.nom) + '" style="--c:' + x.couleur + '">' +
+      '<div class="tete"><i class="pt"></i><span class="n">' + esc(x.nom) + '</span><span class="pc">' + pc(x.total / total) + '</span><b>' + euros(x.total) + '</b><span class="chevron">›</span></div>' +
+      '<div class="jauge"><span style="width:' + (x.total / liste[0].total * 100).toFixed(2) + '%"></span></div>' + sous + '</div>';
+  }).join('');
+  $('#statCategories').innerHTML = '<div class="stat-cats">' + svg + '<div class="liste-cats">' + lignes + '</div></div>';
+  $$('#statCategories [data-cat]').forEach(el => el.onclick = e => {
+    e.stopPropagation(); statCategorieOuverte = statCategorieOuverte === el.dataset.cat ? '' : el.dataset.cat; rendreCategoriesStats(ops);
+  });
+}
+
+(function brancherStats() {
+  $$('#segPeriode button').forEach(b => b.onclick = () => { statEtat().statPeriode = b.dataset.p; ecrire(LS.local, local); rendreStats(); });
+  const decaler = sens => {
+    const st = statEtat(); let [y, m] = st.statMois;
+    if (st.statPeriode === 'annee') y += sens; else { m += sens; if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; } }
+    st.statMois = [y, m]; statCategorieOuverte = ''; ecrire(LS.local, local); rendreStats();
+  };
+  $('#statPrec').onclick = () => decaler(-1);
+  $('#statSuiv').onclick = () => decaler(1);
+  $('#statCompte').onchange = () => { statCategorieOuverte = ''; rendreStats(); };
+})();

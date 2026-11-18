@@ -170,6 +170,31 @@
       </form>
     </section>
 
+    <!-- STATISTIQUES -->
+    <section id="vue-stats" class="vue" hidden>
+      <div class="barre-stats">
+        <div class="segment seg-periode" id="segPeriode">
+          <button type="button" data-p="mois">Mois</button>
+          <button type="button" data-p="annee">Année</button>
+        </div>
+        <div class="nav-mois">
+          <button type="button" id="statPrec" aria-label="Période précédente">‹</button>
+          <strong id="statLibelle"></strong>
+          <button type="button" id="statSuiv" aria-label="Période suivante">›</button>
+        </div>
+        <select id="statCompte" aria-label="Compte"></select>
+      </div>
+      <div id="statResume" class="stat-resume"></div>
+      <div class="carte stat-carte">
+        <h3 class="stat-titre">Recettes et dépenses</h3>
+        <div id="statBarres"></div>
+      </div>
+      <div class="carte stat-carte">
+        <h3 class="stat-titre">Dépenses par catégorie</h3>
+        <div id="statCategories"></div>
+      </div>
+    </section>
+
     <!-- RÉGLAGES -->
     <section id="vue-reglages" class="vue" hidden>
       <details class="carte" id="secConnexion"><summary>Connexion</summary>
@@ -206,6 +231,7 @@
     <button type="button" data-vue="saisie" class="saisir"><span>+</span>Saisir</button>
     <button type="button" data-vue="accueil" class="actif"><span>◉</span>Soldes</button>
     <button type="button" data-vue="journal"><span>☰</span>Journal</button>
+    <button type="button" data-vue="stats"><span class="ico-stats"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></span>Stats</button>
     <button type="button" data-vue="reglages"><span>⚙</span>Réglages</button>
   </nav>
 
