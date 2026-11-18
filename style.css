@@ -770,3 +770,72 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 .menu-mode-tuiles button { text-align: left; border: 0; background: none; color: var(--texte); font: inherit; font-size: 14px; padding: 9px 12px; border-radius: 8px; cursor: pointer; }
 .menu-mode-tuiles button:hover { background: var(--carte2); }
 .menu-mode-tuiles button.actif { background: rgba(0,255,127,.1); color: var(--vert); font-weight: 700; }
+
+/* ===== Onglet Budget ===== */
+.onglets { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 699px) { .onglets button { font-size: 10px; letter-spacing: -.01em; } }
+.nav-budget { display: flex; gap: 6px; margin-bottom: 10px; }
+.nav-budget button { flex: 0 0 44px; }
+.nav-budget strong { flex: 1 1 0; text-align: center; }
+.bud-hero { padding: 16px 16px 14px; border-radius: 20px; margin-bottom: 10px;
+  background: radial-gradient(90% 120% at 100% 0%, rgba(0,255,127,.12), transparent 60%), var(--carte); }
+.bud-hero.rapide { background: radial-gradient(90% 120% at 100% 0%, rgba(255,214,10,.12), transparent 60%), var(--carte); }
+.bud-hero.depasse { background: radial-gradient(90% 120% at 100% 0%, rgba(255,77,109,.14), transparent 60%), var(--carte); }
+.bud-hero-haut { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.bud-hero .lib { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--discret); }
+.bud-hero .montant { font-size: 32px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--vert); text-shadow: 0 0 24px rgba(0,255,127,.35); }
+.bud-hero .montant.neg { color: var(--rouge); text-shadow: 0 0 24px rgba(255,77,109,.35); }
+.bud-hero-jour { margin: 2px 0 12px; color: var(--discret); font-size: 14px; text-align: right; }
+.bud-hero-jour b { color: var(--texte); }
+.bud-hero-bas { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--discret); }
+.bud-hero-bas b { color: var(--texte); font-variant-numeric: tabular-nums; }
+.bud-jauge { position: relative; height: 10px; border-radius: 999px; background: var(--carte2); display: flex; overflow: visible; }
+.bud-jauge span { height: 100%; }
+.bud-jauge span:first-child { border-radius: 999px 0 0 999px; }
+.bud-jauge .fixe { background: #4b5563; }
+.bud-jauge .var { background: var(--vert); box-shadow: 0 0 8px rgba(0,255,127,.45); border-radius: 0 999px 999px 0; }
+.bud-jauge.rapide .var { background: var(--jaune); box-shadow: 0 0 8px rgba(255,214,10,.45); }
+.bud-jauge.depasse .var, .bud-jauge.depasse .fixe { background: var(--rouge); box-shadow: 0 0 8px rgba(255,77,109,.45); }
+.bud-jauge .repere { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; border-radius: 2px; background: var(--texte); box-shadow: 0 0 6px rgba(255,255,255,.6); }
+.bud-tuiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.bud-tuile { margin: 0 !important; padding: 12px 12px 10px; border-radius: 16px; position: relative; overflow: hidden; }
+.bud-tuile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--vert); box-shadow: 0 0 8px rgba(0,255,127,.5); }
+.bud-tuile.rapide::before { background: var(--jaune); box-shadow: 0 0 8px rgba(255,214,10,.5); }
+.bud-tuile.depasse::before { background: var(--rouge); box-shadow: 0 0 8px rgba(255,77,109,.5); }
+.bud-tuile .t1 { display: flex; align-items: center; justify-content: space-between; }
+.bud-tuile .cat { font-weight: 800; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bud-tuile .t2 { display: flex; align-items: baseline; gap: 6px; margin: 4px 0 8px; min-width: 0; }
+.bud-tuile .reste { font-size: 20px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--vert); white-space: nowrap; }
+.bud-tuile.rapide .reste { color: var(--jaune); }
+.bud-tuile .reste.neg { color: var(--rouge); }
+.bud-tuile .sur { font-size: 12px; color: var(--discret); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bud-tuile .bud-jauge { height: 7px; }
+.bud-tuile .t3 { display: flex; justify-content: space-between; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--discret); white-space: nowrap; }
+.bud-tuile .t3 span:last-child { color: var(--texte); font-weight: 700; }
+.bud-tuile .t4 { margin-top: 3px; font-size: 11px; color: #5b636d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bud-hors { margin: 12px 4px; font-size: 12px; color: var(--discret); text-align: center; }
+.ligne-budget { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--bord); }
+.ligne-budget > span { flex: 1 1 0; min-width: 0; font-weight: 700; }
+.ligne-budget input { flex: 0 0 110px; width: 110px; height: 36px; text-align: right; padding: 0 10px; border-radius: 10px; border: 1px solid var(--bord); background: #0b0d10; color: var(--texte); font: inherit; font-variant-numeric: tabular-nums; }
+.ligne-budget em { flex: 0 0 auto; font-style: normal; color: var(--discret); font-size: 12px; }
+.ligne-budget i { flex: 0 0 96px; text-align: right; font-style: normal; color: var(--discret); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ligne-budget.total { border-bottom: 0; }
+.ligne-budget.total b { flex: 0 0 auto; color: var(--vert); }
+@media (max-width: 699px) {
+  .bud-hero .montant { font-size: 28px; }
+  .bud-tuile { padding: 11px 10px 9px 13px; }
+  .bud-tuile .reste { font-size: 17px; }
+  .bud-tuile .sur { font-size: 11px; }
+  .bud-tuile .t3 { font-size: 11px; }
+  .ligne-budget input { flex-basis: 96px; width: 96px; }
+  .ligne-budget i { flex-basis: 78px; }
+}
+@media (min-width: 700px) { .bud-tuiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.bud-tuile.large { grid-column: 1 / -1; }
+@media (min-width: 700px) { .bud-tuile.large { grid-column: auto; } }
+/* Tuiles du budget : la dernière ligne s'étire toujours sur toute la largeur (pas de trou) */
+.bud-tuiles { display: flex; flex-wrap: wrap; gap: 8px; }
+.bud-tuiles .bud-tuile { flex: 1 1 calc(50% - 4px); min-width: 0; }
+@media (min-width: 700px) { .bud-tuiles .bud-tuile { flex-basis: calc(33.333% - 6px); } }
+.ligne-budget i { flex: 0 0 112px; white-space: nowrap; }
+@media (max-width: 699px) { .ligne-budget i { flex-basis: 98px; font-size: 11px; } .ligne-budget input { flex-basis: 88px; width: 88px; } }

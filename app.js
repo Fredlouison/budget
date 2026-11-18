@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.35.0';
+const VERSION_APP = '1.36.1';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -13,6 +13,12 @@ const CLES = {
   Favoris: ['id'], Parametres: ['cle']
 };
 const INTERVALLES = { MENSUEL: 1, BIMESTRIEL: 2, TRIMESTRIEL: 3, QUADRIMESTRIEL: 4, SEMESTRIEL: 6, ANNUEL: 12 };
+// Objectif « niveau 2 » validé le 18/11/2026 (montants annuels, modifiables dans Réglages > Budget).
+const BUDGET_DEFAUT = { Maison: 12800, Fred: 9750, Vacances: 4000, Voiture: 4700, Alimentation: 4000, Virgil: 4800, 'Numérique': 1200 };
+const BUDGET_HORS_DEFAUT = 'Maman;Fred/Divorce';
+let moisBudget = null;
+const COULEURS_STATS = ['#00ff7f', '#00b4ff', '#ff4d6d', '#ffd60a', '#b26bff', '#ff8c42', '#2ee6d6', '#ff5fd2'];
+let statCategorieOuverte = '';
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -71,7 +77,7 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function trierFr(liste) { return liste.slice().sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' })); }
-function param(cle) { const p = data.Parametres.find(x => x.cle === cle); return p ? p.valeur : ''; }
+function param(cle) { const p = (data.Parametres || []).find(x => x.cle === cle); return p ? p.valeur : ''; }
 
 /** Couleur d'un compte (paramètre « couleur:<nom> »), et sa version très claire pour le fond des lignes. */
 function couleurCompte(nom) { return param('couleur:' + nom) || ''; }
@@ -262,6 +268,7 @@ function rendre() {
   if (vueCourante === 'journal') rendreJournal();
   if (vueCourante === 'reglages') rendreReglages();
   if (vueCourante === 'stats') rendreStats();
+  if (vueCourante === 'budget') rendreBudget();
   majEtatSync();
 }
 
@@ -270,7 +277,7 @@ function afficherVue(vue) {
   $$('.vue').forEach(s => { s.hidden = s.id !== 'vue-' + vue; });
   $$('.onglets button').forEach(b => b.classList.toggle('actif', b.dataset.vue === vue));
   document.body.classList.toggle('saisie', vue === 'saisie');
-  $('#titre').textContent = { accueil: 'Soldes', journal: 'Journal', saisie: edition ? 'Modifier' : 'Nouvelle opération', reglages: 'Réglages', stats: 'Statistiques' }[vue];
+  $('#titre').textContent = { accueil: 'Soldes', journal: 'Journal', saisie: edition ? 'Modifier' : 'Nouvelle opération', reglages: 'Réglages', stats: 'Statistiques', budget: 'Budget' }[vue];
   window.scrollTo(0, 0);
   rendre();
 }
@@ -1296,6 +1303,7 @@ function definirDefaut(k) {
 /* ================= Réglages ================= */
 
 function rendreReglages(erreur) {
+  rendreReglagesBudget();
   if (!config.url) $('#secConnexion').open = true;   // premier lancement : la connexion doit être visible
   $('#cfgUrl').value = config.url || '';
   $('#cfgToken').value = config.token || '';
@@ -1566,8 +1574,6 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 /* ===================== STATISTIQUES ===================== */
-const COULEURS_STATS = ['#00ff7f', '#00b4ff', '#ff4d6d', '#ffd60a', '#b26bff', '#ff8c42', '#2ee6d6', '#ff5fd2'];
-let statCategorieOuverte = '';
 
 function statEtat() {
   const j = aujourdhui();
@@ -1580,7 +1586,7 @@ function statEtat() {
 function opsStats(debut, fin, compte) {
   return data.Operations.filter(o => (o.type === 'DEPENSE' || o.type === 'RECETTE') && o.date >= debut && o.date <= fin && (!compte || o.compte === compte));
 }
-const sommeStats = (ops, type) => ops.filter(o => o.type === type).reduce((t, o) => t + (Number(o.montant) || 0), 0) * (type === 'DEPENSE' ? -1 : 1);
+function sommeStats(ops, type) { return ops.filter(o => o.type === type).reduce((t, o) => t + (Number(o.montant) || 0), 0) * (type === 'DEPENSE' ? -1 : 1); }
 
 function rendreStats() {
   const st = statEtat();
@@ -1686,4 +1692,127 @@ function rendreCategoriesStats(ops) {
   $('#statPrec').onclick = () => decaler(-1);
   $('#statSuiv').onclick = () => decaler(1);
   $('#statCompte').onchange = () => { statCategorieOuverte = ''; rendreStats(); };
+})();
+
+
+/* ===================== BUDGET ===================== */
+
+const euros0 = v => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Math.round(Number(v) || 0));
+function initialiserBudget() {
+  if (!data.Comptes || !data.Comptes.length || !data.Parametres) return;   // données pas encore chargées
+  if (data.Parametres.some(p => String(p.cle).startsWith('budget:'))) return;
+  const muts = Object.entries(BUDGET_DEFAUT).map(([c, v]) => ({ table: 'Parametres', op: 'upsert', data: { cle: 'budget:' + c, valeur: String(v) } }));
+  muts.push({ table: 'Parametres', op: 'upsert', data: { cle: 'budget_debut', valeur: '2026-11' } },
+            { table: 'Parametres', op: 'upsert', data: { cle: 'budget_hors', valeur: BUDGET_HORS_DEFAUT } });
+  modifier(muts);
+}
+function budgetsAnnuels() { return (data.Parametres || []).filter(p => String(p.cle).startsWith('budget:'))
+  .map(p => ({ cat: String(p.cle).slice(7), annuel: Number(String(p.valeur).replace(',', '.')) || 0 })).filter(b => b.annuel > 0); }
+function horsBudget(o) {
+  const hors = String(param('budget_hors') || BUDGET_HORS_DEFAUT).split(';').map(x => x.trim()).filter(Boolean);
+  return hors.includes(o.categorie) || hors.includes(o.categorie + '/' + o.sous_categorie);
+}
+/** Montant dépensé (dépenses moins remboursements) d'une catégorie entre deux dates, échéances prévues comprises. */
+function depenseBudget(cat, debut, fin, seulementRecurrentes) {
+  let t = 0;
+  for (const o of data.Operations) {
+    if (o.categorie !== cat || o.date < debut || o.date > fin || horsBudget(o)) continue;
+    if (o.type !== 'DEPENSE' && o.type !== 'RECETTE') continue;
+    if (seulementRecurrentes && !o.serie_id) continue;
+    t -= Number(o.montant) || 0;
+  }
+  return t;
+}
+/** Budget lissé du mois : ce qui reste du budget de la période, réparti sur les mois restants (mois courant compris). */
+function calculBudget(b, y, m) {
+  const deb = String(param('budget_debut') || '2026-11');
+  const [dy, dm] = deb.split('-').map(Number);
+  const moisDebut = dy === y ? dm : dy > y ? 13 : 1;
+  const dansPeriode = m >= moisDebut;
+  const nbMois = 13 - moisDebut;
+  const finMois = ymd(y, m, joursDansMois(y, m));
+  const depAvant = dansPeriode && m > moisDebut ? depenseBudget(b.cat, ymd(y, moisDebut, 1), ymd(y, m - 1, joursDansMois(y, m - 1))) : 0;
+  const alloue = dansPeriode ? Math.max(0, (b.annuel * nbMois / 12 - depAvant) / (13 - m)) : b.annuel / 12;
+  const depense = depenseBudget(b.cat, ymd(y, m, 1), finMois);
+  const fixe = Math.max(0, depenseBudget(b.cat, ymd(y, m, 1), finMois, true));
+  const anDepense = depenseBudget(b.cat, ymd(y, moisDebut > 12 ? 1 : moisDebut, 1), finMois);
+  return { alloue, depense, fixe, reste: alloue - depense, anDepense, anBudget: b.annuel * (dansPeriode ? nbMois : 12) / 12 };
+}
+function rythmeMois(y, m) {
+  const j = aujourdhui(), ym = j.slice(0, 7), cible = ymd(y, m, 1).slice(0, 7);
+  const nbJ = joursDansMois(y, m);
+  if (cible < ym) return { avance: 1, joursRestants: 0, nbJ };
+  if (cible > ym) return { avance: 0, joursRestants: nbJ, nbJ };
+  const d = Number(j.slice(8, 10));
+  return { avance: d / nbJ, joursRestants: nbJ - d + 1, nbJ };
+}
+function etatBudget(x, avance) {
+  const attendu = x.fixe + Math.max(0, x.alloue - x.fixe) * avance;
+  if (x.depense > x.alloue + 0.004) return 'depasse';
+  if (x.depense > attendu + 0.004) return 'rapide';
+  return 'ok';
+}
+
+function rendreBudget() {
+  initialiserBudget();
+  const j = aujourdhui();
+  if (!moisBudget) moisBudget = [Number(j.slice(0, 4)), Number(j.slice(5, 7))];
+  const [y, m] = moisBudget;
+  $('#budLibelle').textContent = MOIS[m - 1] + ' ' + y;
+  const r = rythmeMois(y, m);
+  const lignes = budgetsAnnuels().map(b => Object.assign({ cat: b.cat }, calculBudget(b, y, m)));
+  lignes.sort((a, b) => b.alloue - a.alloue);
+  const tot = lignes.reduce((t, x) => ({ alloue: t.alloue + x.alloue, depense: t.depense + x.depense, fixe: t.fixe + x.fixe }), { alloue: 0, depense: 0, fixe: 0 });
+  const reste = tot.alloue - tot.depense;
+  const etatG = etatBudget(tot, r.avance);
+  const parJour = r.joursRestants ? reste / r.joursRestants : 0;
+  const pct = v => Math.max(0, Math.min(100, v * 100)).toFixed(1);
+  const jauge = (x, etat) => '<div class="bud-jauge ' + etat + '"><span class="fixe" style="width:' + pct(x.alloue ? Math.min(x.fixe, x.depense) / x.alloue : 0) + '%"></span>' +
+    '<span class="var" style="width:' + pct(x.alloue ? Math.max(0, x.depense - x.fixe) / x.alloue : 0) + '%"></span>' +
+    (r.avance > 0 && r.avance < 1 ? '<i class="repere" style="left:' + pct((x.fixe + Math.max(0, x.alloue - x.fixe) * r.avance) / (x.alloue || 1)) + '%"></i>' : '') + '</div>';
+  $('#budHero').className = 'carte bud-hero ' + etatG;
+  $('#budHero').innerHTML =
+    '<div class="bud-hero-haut"><span class="lib">Reste à dépenser</span><span class="montant ' + (reste < 0 ? 'neg' : '') + '">' + euros(reste) + '</span></div>' +
+    '<div class="bud-hero-jour">' + (r.joursRestants ? (reste > 0 ? 'soit <b>' + euros(parJour) + '</b> par jour pendant ' + r.joursRestants + ' jour' + (r.joursRestants > 1 ? 's' : '') : 'budget du mois dépassé') : 'mois terminé') + '</div>' +
+    jauge(tot, etatG) +
+    '<div class="bud-hero-bas"><span>Budget <b>' + euros(tot.alloue) + '</b></span><span>Dépensé <b>' + euros(tot.depense) + '</b></span><span>dont prévu <b>' + euros(tot.fixe) + '</b></span></div>';
+  $('#budTuiles').innerHTML = lignes.map((x, i) => {
+    const etat = etatBudget(x, r.avance);
+    const pj = r.joursRestants && x.reste > 0 ? euros0(x.reste / r.joursRestants) + '/j' : '';
+    const large = lignes.length % 2 === 1 && i === lignes.length - 1 ? ' large' : '';
+    return '<div class="carte bud-tuile ' + etat + large + '">' +
+      '<div class="t1"><span class="cat">' + esc(x.cat) + '</span></div>' +
+      '<div class="t2"><b class="reste ' + (x.reste < 0 ? 'neg' : '') + '">' + euros0(x.reste) + '</b><span class="sur">sur ' + euros0(x.alloue) + '</span></div>' +
+      jauge(x, etat) +
+      '<div class="t3"><span>Dépensé ' + euros0(x.depense) + '</span><span>' + pj + '</span></div>' +
+      '<div class="t4">Année : ' + euros0(x.anDepense) + ' / ' + euros0(x.anBudget) + '</div></div>';
+  }).join('') || '<p class="vide-stats">Aucun budget. Règle les montants dans Réglages &gt; Budget.</p>';
+  const horsMois = data.Operations.filter(o => horsBudget(o) && o.date.slice(0, 7) === ymd(y, m, 1).slice(0, 7) && (o.type === 'DEPENSE' || o.type === 'RECETTE'))
+    .reduce((t, o) => t - (Number(o.montant) || 0), 0);
+  $('#budHors').textContent = Math.abs(horsMois) > 0.004 ? 'Hors budget ce mois (divorce, ta mère) : ' + euros(horsMois) : '';
+}
+
+function rendreReglagesBudget() {
+  if (!$('#listeBudget')) return;
+  initialiserBudget();
+  const budgets = budgetsAnnuels();
+  const cats = trierFr([...new Set([...budgets.map(b => b.cat), ...(data.Categories || []).map(c => c.categorie || c.nom).filter(Boolean)])])
+    .filter(c => c !== 'Ressource' && c !== 'Maman');
+  $('#listeBudget').innerHTML = cats.map(c => {
+    const b = budgets.find(x => x.cat === c);
+    return '<label class="ligne-budget"><span>' + esc(c) + '</span><input type="text" inputmode="decimal" data-budget="' + esc(c) + '" value="' + (b ? b.annuel : '') + '" placeholder="—"><em>€/an</em><i>' + (b ? euros(b.annuel / 12) + '/mois' : '') + '</i></label>';
+  }).join('') + '<div class="ligne-budget total"><span>Total</span><b>' + euros(budgets.reduce((t, b) => t + b.annuel, 0)) + '/an</b><i>' + euros(budgets.reduce((t, b) => t + b.annuel, 0) / 12) + '/mois</i></div>';
+  $$('[data-budget]').forEach(inp => inp.onchange = () => {
+    const v = Math.round((Number(inp.value.replace(/\s/g, '').replace(',', '.')) || 0) * 100) / 100;
+    modifier([{ table: 'Parametres', op: v > 0 ? 'upsert' : 'delete', data: { cle: 'budget:' + inp.dataset.budget, valeur: String(v) } }]);
+    toast('Budget ' + inp.dataset.budget + ' : ' + (v > 0 ? euros(v) + '/an' : 'supprimé'));
+  });
+  $('#budDebut').value = String(param('budget_debut') || '2026-11');
+  $('#budDebut').onchange = () => { if ($('#budDebut').value) modifier([{ table: 'Parametres', op: 'upsert', data: { cle: 'budget_debut', valeur: $('#budDebut').value } }]); };
+}
+
+(function brancherBudget() {
+  const dec = s2 => { let [y, m] = moisBudget; m += s2; if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; } moisBudget = [y, m]; rendreBudget(); };
+  $('#budPrec').onclick = () => dec(-1);
+  $('#budSuiv').onclick = () => dec(1);
 })();

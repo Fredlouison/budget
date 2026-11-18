@@ -170,6 +170,18 @@
       </form>
     </section>
 
+    <!-- BUDGET -->
+    <section id="vue-budget" class="vue" hidden>
+      <div class="nav-mois nav-budget">
+        <button type="button" id="budPrec" aria-label="Mois précédent">‹</button>
+        <strong id="budLibelle"></strong>
+        <button type="button" id="budSuiv" aria-label="Mois suivant">›</button>
+      </div>
+      <div id="budHero" class="carte bud-hero"></div>
+      <div id="budTuiles" class="bud-tuiles"></div>
+      <p id="budHors" class="bud-hors"></p>
+    </section>
+
     <!-- STATISTIQUES -->
     <section id="vue-stats" class="vue" hidden>
       <div class="barre-stats">
@@ -213,6 +225,11 @@
         <button type="button" class="secondaire" id="btnAnneeSuivante"></button>
       </details>
 
+      <details class="carte" id="secBudget"><summary>Budget</summary>
+        <p class="discret">Montant annuel par catégorie. Chaque mois reçoit ce qui reste du budget de l'année, réparti sur les mois restants : ce que tu ne dépenses pas un mois s'ajoute aux suivants, et inversement.</p>
+        <div id="listeBudget"></div>
+        <label class="champ">Début du budget<input type="month" id="budDebut"></label>
+      </details>
       <details class="carte" id="secComptes"><summary>Comptes</summary>
         <div id="listeComptesReglages"></div>
         <button type="button" class="secondaire" id="btnAjoutCompte" style="width:100%;margin-top:8px">+ Ajouter un compte</button>
@@ -229,8 +246,9 @@
 
   <nav class="onglets">
     <button type="button" data-vue="saisie" class="saisir"><span>+</span>Saisir</button>
-    <button type="button" data-vue="accueil" class="actif"><span>◉</span>Soldes</button>
     <button type="button" data-vue="journal"><span>☰</span>Journal</button>
+    <button type="button" data-vue="budget"><span class="ico-stats"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3M4 7.5V17a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H6.5A2.5 2.5 0 0 1 4 7.5zM16 13.5h.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Budget</button>
+    <button type="button" data-vue="accueil" class="actif"><span>◉</span>Soldes</button>
     <button type="button" data-vue="stats"><span class="ico-stats"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></span>Stats</button>
     <button type="button" data-vue="reglages"><span>⚙</span>Réglages</button>
   </nav>
