@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.37.0';
+const VERSION_APP = '1.38.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -80,6 +80,8 @@ function trierFr(liste) { return liste.slice().sort((a, b) => a.localeCompare(b,
 function param(cle) { const p = (data.Parametres || []).find(x => x.cle === cle); return p ? p.valeur : ''; }
 
 /** Couleur d'un compte (paramètre « couleur:<nom> »), et sa version très claire pour le fond des lignes. */
+/** Part de l'utilisateur dans les dépenses d'un compte partagé (paramètre « part:<compte> », 100 % par défaut). */
+function partCompte(nom) { const v = Number(String(param('part:' + nom) || '').replace(',', '.')); return v > 0 && v <= 100 ? v / 100 : 1; }
 function couleurCompte(nom) { return param('couleur:' + nom) || ''; }
 /** Liseré gauche en couleur pleine du compte. */
 function liseret(nom) { const c = couleurCompte(nom); return c ? 'border-left:5px solid ' + c + ';' : ''; }
@@ -1424,6 +1426,7 @@ function ouvrirFicheCompte(nom) {
   $('#fcSolde').value = c ? String(Number(c.solde_initial) || 0).replace('.', ',') : '';
   $('#fcDate').value = c ? (c.date_solde || '') : decalerJours(aujourdhui(), -1);
   $('#fcActif').checked = c ? c.actif !== false : true;
+  $('#fcPart').value = c ? String(Math.round(partCompte(c.nom) * 100)) : '100';
   couleurChoisie = c ? couleurCompte(c.nom) : '';
   $('#fcCouleur').value = couleurChoisie || '#ffffff';
   $('#fcSansCouleur').classList.toggle('actif', !couleurChoisie);
@@ -1448,6 +1451,9 @@ function enregistrerFicheCompte() {
   if (!$('#fcDate').value) { err.textContent = 'Indique la date du solde de départ.'; return; }
   const ordre = compteEdite ? compteEdite.ordre : Math.max(0, ...data.Comptes.map(c => Number(c.ordre) || 0)) + 1;
   const muts = [{ table: 'Comptes', op: 'upsert', data: { nom, solde_initial: solde || 0, date_solde: $('#fcDate').value, ordre, actif: $('#fcActif').checked } }];
+  const part = Math.round(Number(String($('#fcPart').value).replace('%', '').replace(',', '.')));
+  if (!(part >= 1 && part <= 100)) { err.textContent = 'Ta part doit être entre 1 et 100 %.'; return; }
+  if (part !== Math.round(partCompte(nom) * 100)) muts.push({ table: 'Parametres', op: part === 100 ? 'delete' : 'upsert', data: { cle: 'part:' + nom, valeur: String(part) } });
   if (couleurChoisie !== couleurCompte(nom)) muts.push({ table: 'Parametres', op: 'upsert', data: { cle: 'couleur:' + nom, valeur: couleurChoisie } });
   modifier(muts);
   $('#ficheCompte').hidden = true;
@@ -1587,7 +1593,7 @@ function statEtat() {
 function opsStats(debut, fin, compte) {
   return data.Operations.filter(o => (o.type === 'DEPENSE' || o.type === 'RECETTE') && o.date >= debut && o.date <= fin && (!compte || o.compte === compte));
 }
-function sommeStats(ops, type) { return ops.filter(o => o.type === type).reduce((t, o) => t + (Number(o.montant) || 0), 0) * (type === 'DEPENSE' ? -1 : 1); }
+function sommeStats(ops, type) { return ops.filter(o => o.type === type).reduce((t, o) => t + (Number(o.montant) || 0) * partCompte(o.compte), 0) * (type === 'DEPENSE' ? -1 : 1); }
 
 function rendreStats() {
   const st = statEtat();
@@ -1647,7 +1653,7 @@ function rendreBarresStats(y, moisActif, compte) {
 function rendreCategoriesStats(ops) {
   const parCat = {};
   ops.filter(o => o.type === 'DEPENSE').forEach(o => {
-    const c = o.categorie || 'Sans catégorie', s = o.sous_categorie || '—', v = -(Number(o.montant) || 0);
+    const c = o.categorie || 'Sans catégorie', s = o.sous_categorie || '—', v = -(Number(o.montant) || 0) * partCompte(o.compte);
     parCat[c] = parCat[c] || { total: 0, sous: {} };
     parCat[c].total += v; parCat[c].sous[s] = (parCat[c].sous[s] || 0) + v;
   });
@@ -1720,7 +1726,7 @@ function depenseBudget(cat, debut, fin, seulementRecurrentes) {
     if (o.categorie !== cat || o.date < debut || o.date > fin || horsBudget(o)) continue;
     if (o.type !== 'DEPENSE' && o.type !== 'RECETTE') continue;
     if (seulementRecurrentes && !o.serie_id) continue;
-    t -= Number(o.montant) || 0;
+    t -= (Number(o.montant) || 0) * partCompte(o.compte);
   }
   return t;
 }
@@ -1789,7 +1795,7 @@ function rendreBudget() {
       '<div class="t4">Année : ' + euros0(x.anDepense) + ' / ' + euros0(x.anBudget) + '</div></div>';
   }).join('') || '<p class="vide-stats">Aucun budget. Règle les montants dans Réglages &gt; Budget.</p>';
   const horsMois = data.Operations.filter(o => horsBudget(o) && o.date.slice(0, 7) === ymd(y, m, 1).slice(0, 7) && (o.type === 'DEPENSE' || o.type === 'RECETTE'))
-    .reduce((t, o) => t - (Number(o.montant) || 0), 0);
+    .reduce((t, o) => t - (Number(o.montant) || 0) * partCompte(o.compte), 0);
   $('#budHors').textContent = Math.abs(horsMois) > 0.004 ? 'Hors budget ce mois (divorce, ta mère) : ' + euros(horsMois) : '';
 }
 

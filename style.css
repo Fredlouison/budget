@@ -839,3 +839,8 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 @media (min-width: 700px) { .bud-tuiles .bud-tuile { flex-basis: calc(33.333% - 6px); } }
 .ligne-budget i { flex: 0 0 112px; white-space: nowrap; }
 @media (max-width: 699px) { .ligne-budget i { flex-basis: 98px; font-size: 11px; } .ligne-budget input { flex-basis: 88px; width: 88px; } }
+
+/* Fiche compte : part des dépenses (compte partagé) */
+.avec-suffixe { display: flex; align-items: center; gap: 8px; }
+.avec-suffixe input { flex: 1 1 0; min-width: 0; text-align: right; }
+.avec-suffixe em { flex: 0 0 auto; font-style: normal; font-weight: 800; color: var(--discret); }
