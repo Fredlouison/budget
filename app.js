@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.38.0';
+const VERSION_APP = '1.39.1';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -17,6 +17,7 @@ const INTERVALLES = { MENSUEL: 1, BIMESTRIEL: 2, TRIMESTRIEL: 3, QUADRIMESTRIEL:
 const BUDGET_DEFAUT = { Maison: 12800, Fred: 9750, Vacances: 4000, Voiture: 4700, Alimentation: 4000, Virgil: 4800, 'Numérique': 1200 };
 const BUDGET_HORS_DEFAUT = 'Maman;Fred/Divorce';
 let moisBudget = null;
+let sousVueBudget = 'mois';
 const COULEURS_STATS = ['#00ff7f', '#00b4ff', '#ff4d6d', '#ffd60a', '#b26bff', '#ff8c42', '#2ee6d6', '#ff5fd2'];
 let statCategorieOuverte = '';
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -271,7 +272,7 @@ function rendre() {
   if (vueCourante === 'journal') rendreJournal();
   if (vueCourante === 'reglages') rendreReglages();
   if (vueCourante === 'stats') rendreStats();
-  if (vueCourante === 'budget') rendreBudget();
+  if (vueCourante === 'budget') { rendreBudget(); if (sousVueBudget === 'prevision') rendrePrevision(); }
   majEtatSync();
 }
 
@@ -1848,3 +1849,138 @@ function migrerPrintyshirt() {
   modifier(muts);
   toast('Catégorie Printyshirt : ' + series.length + ' abonnement(s) et ' + (muts.length - series.length - 1) + ' ligne(s) reclassés');
 }
+
+
+/* ===================== PRÉVISION (onglet Budget > Prévision) ===================== */
+// Hypothèses validées le 18/11/2026, modifiables (paramètres « prev:<clé> »).
+const PREV_HYP = [
+  { k: 'rsa', lib: 'RSA aujourd\'hui', v: 678, u: '€/mois' },
+  { k: 'apl', lib: 'APL aujourd\'hui', v: 402, u: '€/mois' },
+  { k: 'heritage', lib: 'Héritage (montant)', v: 50000, u: '€' },
+  { k: 'heritage_mois', lib: 'Héritage (mois)', v: '2027-04', u: 'mois' },
+  { k: 'prestation', lib: 'Prestation compensatoire (ex-femme)', v: 8000, u: '€' },
+  { k: 'prestation_mois', lib: 'Prestation compensatoire (mois)', v: '2027-06', u: 'mois' },
+  { k: 'rsa_apres', lib: 'RSA après l\'héritage (estimation)', v: 580, u: '€/mois' },
+  { k: 'apl_apres', lib: 'APL après l\'héritage (estimation)', v: 300, u: '€/mois' },
+  { k: 'part_sci', lib: 'Ta part dans la SCI après la vente', v: 225000, u: '€' },
+  { k: 'flat', lib: 'Impôt sur les dividendes de la SCI', v: 33, u: '%' },
+  { k: 'vosges_sci', lib: 'Vente de tes parts des Vosges à la SCI (0 = non)', v: 35000, u: '€' },
+  { k: 'vosges_frais', lib: 'Frais de cette vente (payés par la SCI)', v: 2800, u: '€' },
+  { k: 'maison', lib: 'Maison achetée par la SCI (frais et travaux)', v: 175000, u: '€' },
+  { k: 'loyer', lib: 'Loyer actuel', v: 868, u: '€/mois' },
+  { k: 'loyer_sci', lib: 'Loyer que tu verses à la SCI', v: 450, u: '€/mois' },
+  { k: 'charges_proprio', lib: 'Taxe foncière + entretien (payés par la SCI)', v: 150, u: '€/mois' },
+  { k: 'vosges', lib: 'Maison des Vosges (frais + 2 allers-retours)', v: 167, u: '€/mois' },
+  { k: 'printy', lib: 'Printyshirt : coûts', v: 75, u: '€/mois' },
+  { k: 'printy_rev', lib: 'Printyshirt : revenus', v: 0, u: '€/mois' },
+  { k: 'emprunt', lib: 'Emprunt (fin nov. 2027)', v: 237, u: '€/mois' },
+  { k: 'elec', lib: 'Voiture électrique : économie de carburant', v: 140, u: '€/mois' },
+  { k: 'elec_cout', lib: 'Voiture électrique : coût net du changement', v: 0, u: '€' }
+];
+const COMPTE_RESERVE = 'Livret A Virgil';
+let venteChoisie = '2027-12';
+
+function hyp(k) {
+  const h = PREV_HYP.find(x => x.k === k), p = param('prev:' + k);
+  if (p === '' || p == null) return h.v;
+  return h.u === 'mois' ? String(p) : Number(String(p).replace(',', '.')) || 0;
+}
+const ajoutMois = (ym, n) => { let [y, m] = ym.split('-').map(Number); m += n; while (m > 12) { m -= 12; y++; } while (m < 1) { m += 12; y--; } return y + '-' + String(m).padStart(2, '0'); };
+
+function capitalDepart() {
+  const j = aujourdhui();
+  let dispo = 0, reserve = 0;
+  data.Comptes.forEach(c => {
+    const v = soldesCompte(c, j).aujourdhui;
+    if (c.nom === COMPTE_RESERVE) reserve += v; else dispo += v * partCompte(c.nom);
+  });
+  return { dispo, reserve };
+}
+
+/**
+ * Argent dont tu peux disposer, fin de chaque mois de décembre 2026 à décembre 2031.
+ * Deux poches : ton argent perso, et la trésorerie de la SCI (accessible en dividendes, après impôt).
+ * Quand ta poche perso est vide, la prévision prend un dividende dans la SCI.
+ */
+function simuler(scenario, vente) {
+  const budgetMensuel = budgetsAnnuels().reduce((t, b) => t + b.annuel, 0) / 12;   // train de vie : ton budget, loyer et emprunt compris
+  const net = 1 - hyp('flat') / 100;
+  let perso = capitalDepart().dispo, sci = 0;
+  const debut = ajoutMois(aujourdhui().slice(0, 7), 1), points = [];
+  const hMois = String(hyp('heritage_mois')), pMois = String(hyp('prestation_mois'));
+  const maison = scenario !== 'tel';
+  for (let i = 0; i < 61; i++) {
+    const ym = ajoutMois(debut, i);
+    const apresHeritage = ym >= hMois, apresVente = vente && ym > vente;
+    let entrees = hyp('printy_rev');
+    if (apresVente) { /* capital important dans la SCI : plus de RSA ni d'APL (hypothèse prudente) */ }
+    else if (apresHeritage && ym < ajoutMois(hMois, 3)) { /* trimestre de l'héritage : RSA et APL suspendus */ }
+    else if (apresHeritage) entrees += hyp('rsa_apres') + hyp('apl_apres');
+    else entrees += hyp('rsa') + hyp('apl');
+    let sorties = budgetMensuel + hyp('printy');
+    if (ym > '2027-11') sorties -= hyp('emprunt');
+    if (apresHeritage) sorties += hyp('vosges');
+    if (maison && apresVente) { sorties += hyp('loyer_sci') - hyp('loyer'); sci += hyp('loyer_sci') - hyp('charges_proprio'); }
+    if (scenario === 'elec' && apresVente) sorties -= hyp('elec');
+    perso += entrees - sorties;
+    if (ym === hMois) perso += hyp('heritage');
+    if (ym === pMois) perso += hyp('prestation');
+    if (vente && ym === ajoutMois(vente, 1)) {
+      sci += hyp('part_sci');
+      if (hyp('vosges_sci') > 0) { sci -= hyp('vosges_sci') + hyp('vosges_frais'); perso += hyp('vosges_sci'); }
+      if (maison) sci -= hyp('maison');
+      if (scenario === 'elec') perso -= hyp('elec_cout');
+    }
+    if (perso < 0 && sci > 0) { const pris = Math.min(sci, -perso / net); sci -= pris; perso += pris * net; }   // dividende pour combler
+    points.push({ ym, cap: perso + Math.max(0, sci) * net, perso, sci });
+  }
+  return points;
+}
+
+function rendrePrevision() {
+  $$('#segVente button').forEach(b => b.classList.toggle('actif', b.dataset.vente === venteChoisie));
+  const sc = [
+    { id: 'tel', nom: 'Tel quel', desc: 'Tu restes dans ta location', coul: '#b26bff' },
+    { id: 'maison', nom: 'Maison via la SCI', desc: 'Tu paies ton loyer à la SCI', coul: '#00b4ff' },
+    { id: 'elec', nom: 'Maison + électrique', desc: 'Et voiture électrique', coul: '#00ff7f' }
+  ].map(x => Object.assign(x, { pts: simuler(x.id, venteChoisie) }));
+  const tous = sc.flatMap(x => x.pts.map(p => p.cap));
+  const max = Math.max(1, ...tous), min = Math.min(0, ...tous);
+  const W = Math.max(320, Math.round($('#prevGraphe').clientWidth || 700)), H = W < 500 ? 220 : 260, g = 46, bas = 22, haut = 10;
+  const X = i => g + (W - g - 6) * i / 60, Y = v => haut + (H - bas - haut) * (max - v) / (max - min || 1);
+  const pas = [10000, 20000, 25000, 50000, 100000].find(p => (max - min) / p <= 5) || 200000;
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="stat-svg prev-svg" role="img" aria-label="Capital disponible par scénario">';
+  for (let v = Math.ceil(min / pas) * pas; v <= max; v += pas)
+    svg += '<line x1="' + g + '" x2="' + W + '" y1="' + Y(v) + '" y2="' + Y(v) + '" class="grille' + (v === 0 ? ' zero' : '') + '"/><text x="' + (g - 6) + '" y="' + (Y(v) + 4) + '" class="axe" text-anchor="end">' + Math.round(v / 1000) + 'k</text>';
+  for (let a = 0; a <= 5; a++) { const i = sc[0].pts.findIndex(p => p.ym === (2027 + a) + '-01'); if (i >= 0) svg += '<line x1="' + X(i) + '" x2="' + X(i) + '" y1="' + haut + '" y2="' + (H - bas) + '" class="grille"/><text x="' + X(i) + '" y="' + (H - 6) + '" class="axe" text-anchor="middle">' + (2027 + a) + '</text>'; }
+  sc.slice().reverse().forEach(x => {
+    svg += '<polyline fill="none" stroke="' + x.coul + '" stroke-width="2.5" stroke-linejoin="round" style="filter:drop-shadow(0 0 4px ' + x.coul + '88)" points="' + x.pts.map((p, i) => X(i).toFixed(1) + ',' + Y(p.cap).toFixed(1)).join(' ') + '"/>';
+  });
+  $('#prevGraphe').innerHTML = svg + '</svg><div class="stat-legende">' + sc.map(x => '<span><i class="puce-leg" style="background:' + x.coul + ';box-shadow:0 0 6px ' + x.coul + '"></i>' + x.nom + '</span>').join('') + '</div>';
+  const nomMois = ym => MOIS[Number(ym.slice(5)) - 1] + ' ' + ym.slice(0, 4);
+  $('#prevScenarios').innerHTML = sc.map(x => {
+    const fin = x.pts.find(p => p.cap < 0), dernier = x.pts[x.pts.length - 1];
+    return '<div class="carte prev-sc" style="--c:' + x.coul + '"><div class="nom">' + x.nom + '</div><div class="desc">' + x.desc + '</div>' +
+      (fin ? '<div class="res neg">Argent disponible épuisé en <b>' + nomMois(fin.ym) + '</b></div>' : '<div class="res">Disponible fin 2031 : <b>' + euros0(dernier.cap) + '</b></div>') +
+      (x.id !== 'tel' && venteChoisie ? '<div class="patri">+ la maison dans la SCI (' + euros0(hyp('maison')) + ')</div>' : '') + '</div>';
+  }).join('');
+  const cd = capitalDepart();
+  if (!venteChoisie) $('#prevScenarios').innerHTML = '<p class="bud-hors">Sans vente du bâtiment, les trois scénarios sont identiques : pas d\'achat de maison ni de changement de voiture.</p>' + $('#prevScenarios').innerHTML;
+  $('#prevReserve').textContent = 'Courbe : ton argent perso + ce que tu pourrais sortir de la SCI en dividendes, après ' + hyp('flat') + ' % d\'impôt. Point de départ : ' + euros0(cd.dispo) + ' disponibles aujourd\'hui (compte commun pour ta moitié). Réserve de dernier recours non comptée : ' + euros0(cd.reserve) + '. Train de vie = ton budget (' + euros0(budgetsAnnuels().reduce((t, b) => t + b.annuel, 0)) + '/an).';
+  $('#prevHypotheses').innerHTML = PREV_HYP.map(h => '<label class="ligne-budget"><span>' + esc(h.lib) + '</span><input type="' + (h.u === 'mois' ? 'month' : 'text') + '" inputmode="decimal" data-hyp="' + h.k + '" value="' + esc(hyp(h.k)) + '"><em>' + (h.u === 'mois' ? '' : h.u) + '</em></label>').join('') +
+    '<p class="discret">Estimations à vérifier : RSA et APL après l\'héritage (simulateur caf.fr), et la suppression du RSA et de l\'APL après la vente du bâtiment. Ne sont pas comptés : les intérêts de ton épargne, l\'impôt sur les loyers reçus par la SCI.</p>';
+  $$('[data-hyp]').forEach(inp => inp.onchange = () => {
+    const h = PREV_HYP.find(x => x.k === inp.dataset.hyp);
+    modifier([{ table: 'Parametres', op: 'upsert', data: { cle: 'prev:' + h.k, valeur: h.u === 'mois' ? inp.value : String(Number(inp.value.replace(/\s/g, '').replace(',', '.')) || 0) } }]);
+  });
+}
+
+(function brancherPrevision() {
+  $$('#segBudget button').forEach(b => b.onclick = () => {
+    sousVueBudget = b.dataset.sv;
+    $$('#segBudget button').forEach(x => x.classList.toggle('actif', x === b));
+    $('#budMois').hidden = sousVueBudget !== 'mois'; $('#budPrevision').hidden = sousVueBudget !== 'prevision';
+    if (sousVueBudget === 'prevision') rendrePrevision(); else rendreBudget();
+  });
+  $$('#segVente button').forEach(b => b.onclick = () => { venteChoisie = b.dataset.vente; rendrePrevision(); });
+})();

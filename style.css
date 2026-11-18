@@ -844,3 +844,29 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 .avec-suffixe { display: flex; align-items: center; gap: 8px; }
 .avec-suffixe input { flex: 1 1 0; min-width: 0; text-align: right; }
 .avec-suffixe em { flex: 0 0 auto; font-style: normal; font-weight: 800; color: var(--discret); }
+
+/* ===== Budget > Prévision ===== */
+.seg-budget, .seg-vente { grid-template-columns: repeat(2, 1fr); margin-bottom: 10px; }
+.seg-vente { grid-template-columns: repeat(3, 1fr); }
+.seg-budget button.actif, .seg-vente button.actif { background: var(--vert); color: #000; box-shadow: 0 0 14px rgba(0,255,127,.35); }
+.prev-svg .grille.zero { stroke: var(--rouge); stroke-dasharray: none; opacity: .6; }
+.prev-scenarios { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.prev-sc { margin: 0 !important; padding: 12px 12px 11px 15px; border-radius: 16px; position: relative; overflow: hidden; }
+.prev-sc::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+.prev-sc .nom { font-weight: 800; font-size: 14px; }
+.prev-sc .desc { font-size: 12px; color: var(--discret); margin: 2px 0 8px; }
+.prev-sc .res { font-size: 13px; color: var(--discret); }
+.prev-sc .res b { display: block; font-size: 17px; color: var(--vert); font-variant-numeric: tabular-nums; }
+.prev-sc .res.neg b { color: var(--rouge); }
+.prev-hypotheses summary { font-weight: 800; cursor: pointer; }
+.prev-hypotheses .ligne-budget input { flex-basis: 120px; width: 120px; }
+@media (max-width: 699px) {
+  .prev-scenarios { grid-template-columns: 1fr; }
+  .prev-sc { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 10px; }
+  .prev-sc .desc { grid-column: 1; margin: 0; }
+  .prev-sc .res { grid-column: 2; grid-row: 1 / span 2; text-align: right; }
+  .seg-vente button { font-size: 12px; padding: 8px 2px; }
+}
+.prev-sc .patri { font-size: 12px; color: var(--discret); margin-top: 3px; }
+.prev-scenarios > p { grid-column: 1 / -1; margin: 0 0 4px; }
+@media (max-width: 699px) { .prev-sc .patri { grid-column: 2; text-align: right; } }

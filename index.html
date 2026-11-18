@@ -172,6 +172,25 @@
 
     <!-- BUDGET -->
     <section id="vue-budget" class="vue" hidden>
+      <div class="segment seg-budget" id="segBudget">
+        <button type="button" data-sv="mois" class="actif">Ce mois</button>
+        <button type="button" data-sv="prevision">Prévision</button>
+      </div>
+      <div id="budPrevision" hidden>
+        <div class="segment seg-vente" id="segVente">
+          <button type="button" data-vente="2027-12">Vente fin 2027</button>
+          <button type="button" data-vente="2028-12">Vente fin 2028</button>
+          <button type="button" data-vente="">Sans vente</button>
+        </div>
+        <div class="carte stat-carte">
+          <h3 class="stat-titre">Ce dont tu peux disposer, mois par mois</h3>
+          <div id="prevGraphe"></div>
+        </div>
+        <div id="prevScenarios" class="prev-scenarios"></div>
+        <p id="prevReserve" class="bud-hors"></p>
+        <details class="carte prev-hypotheses"><summary>Hypothèses (modifiables)</summary><div id="prevHypotheses"></div></details>
+      </div>
+      <div id="budMois">
       <div class="nav-mois nav-budget">
         <button type="button" id="budPrec" aria-label="Mois précédent">‹</button>
         <strong id="budLibelle"></strong>
@@ -180,6 +199,7 @@
       <div id="budHero" class="carte bud-hero"></div>
       <div id="budTuiles" class="bud-tuiles"></div>
       <p id="budHors" class="bud-hors"></p>
+      </div>
     </section>
 
     <!-- STATISTIQUES -->
