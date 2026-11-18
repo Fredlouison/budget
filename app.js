@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.36.1';
+const VERSION_APP = '1.37.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -179,6 +179,7 @@ async function synchroniser() {
     ecrire(LS.data, data);
     local.derniereSync = new Date().toISOString(); ecrire(LS.local, local);
     derniereErreur = '';
+    migrerPrintyshirt();
     majEtatSync();
     rendre();
   } catch (e) {
@@ -1816,3 +1817,28 @@ function rendreReglagesBudget() {
   $('#budPrec').onclick = () => dec(-1);
   $('#budSuiv').onclick = () => dec(1);
 })();
+
+
+/* ===== Migration unique (18/11/2026) : abonnements de l'activité t-shirts → catégorie Printyshirt ===== */
+function migrerPrintyshirt() {
+  if (!data.Comptes || !data.Comptes.length || param('migration_printyshirt')) return;
+  const regles = [
+    { test: d => /adobe\s*creative\s*cloud/i.test(d), sous: 'Logiciels' },
+    { test: d => /^claude\s*ai$/i.test(d.trim()), sous: 'IA' },
+    { test: d => /nom de domaine printyshirt/i.test(d), sous: 'Hébergement' }
+  ];
+  const regle = x => regles.find(r => r.test(String(x.designation || '')));
+  const muts = ['Logiciels', 'IA', 'Hébergement']
+    .filter(sc => !data.Categories.some(c => c.categorie === 'Printyshirt' && c.sous_categorie === sc))
+    .map(sc => ({ table: 'Categories', op: 'upsert', data: { categorie: 'Printyshirt', sous_categorie: sc } }));
+  const series = data.Series.filter(regle);
+  series.forEach(x => muts.push({ table: 'Series', op: 'upsert', data: { id: x.id, categorie: 'Printyshirt', sous_categorie: regle(x).sous } }));
+  const ids = new Set(series.map(x => x.id));
+  data.Operations.filter(o => o.type === 'DEPENSE' && (ids.has(o.serie_id) || regle(o)) && o.categorie !== 'Printyshirt').forEach(o => {
+    const r = regle(o) || regle(series.find(x => x.id === o.serie_id));
+    muts.push({ table: 'Operations', op: 'upsert', data: { id: o.id, categorie: 'Printyshirt', sous_categorie: r.sous } });
+  });
+  muts.push({ table: 'Parametres', op: 'upsert', data: { cle: 'migration_printyshirt', valeur: new Date().toISOString().slice(0, 10) } });
+  modifier(muts);
+  toast('Catégorie Printyshirt : ' + series.length + ' abonnement(s) et ' + (muts.length - series.length - 1) + ' ligne(s) reclassés');
+}
