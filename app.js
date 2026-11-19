@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.39.1';
+const VERSION_APP = '1.40.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -42,6 +42,7 @@ let syncEnCours = false;
 let derniereErreur = '';
 let avertiScript = false;
 let edition = null;   // opération en cours de modification
+let ticketEdition = null;   // ticket ventilé modifié en entier : { groupe, ids }
 let typeCourant = 'DEPENSE';
 let favorisOuverts = false;
 let idsSurlignes = new Set();
@@ -281,7 +282,7 @@ function afficherVue(vue) {
   $$('.vue').forEach(s => { s.hidden = s.id !== 'vue-' + vue; });
   $$('.onglets button').forEach(b => b.classList.toggle('actif', b.dataset.vue === vue));
   document.body.classList.toggle('saisie', vue === 'saisie');
-  $('#titre').textContent = { accueil: 'Soldes', journal: 'Journal', saisie: edition ? 'Modifier' : 'Nouvelle opération', reglages: 'Réglages', stats: 'Statistiques', budget: 'Budget' }[vue];
+  $('#titre').textContent = { accueil: 'Soldes', journal: 'Journal', saisie: ticketEdition ? 'Modifier le ticket' : edition ? 'Modifier' : 'Nouvelle opération', reglages: 'Réglages', stats: 'Statistiques', budget: 'Budget' }[vue];
   window.scrollTo(0, 0);
   rendre();
 }
@@ -643,7 +644,8 @@ function rendreJournal() {
       '<div class="s">Ventilée · ' + esc(o.compte) + (o.paiement ? ' · ' + esc(o.paiement) : '') + '</div></div>' +
       '<button type="button" class="drapeau' + (verifG ? ' actif' : '') + '" data-verif-groupe="' + esc(el.groupe) + '" title="' + (verifG ? 'À vérifier (toucher pour retirer)' : 'Marquer à vérifier') + '" aria-label="À vérifier">' + ICONE_DRAPEAU + '</button>' +
       '<div class="m ' + (total < 0 ? 'neg' : 'pos') + '">' + euros(total) + '</div></div>';
-    if (ouvert) html += '<div class="sous-ops">' + el.enfants.map(x => ligneOp(x, true)).join('') + '</div>';
+    if (ouvert) html += '<div class="sous-ops">' + el.enfants.map(x => ligneOp(x, true)).join('') +
+      (String(el.groupe).startsWith('T-') ? '' : '<button type="button" class="btn-ticket" data-modif-ticket="' + esc(el.groupe) + '">✎ Modifier le ticket</button>') + '</div>';
   });
   $('#listeOps').innerHTML = html || '<p class="discret">Aucune opération.</p>';
   // Drapeau « à vérifier » : la ligne passe en jaune (sans ouvrir la modification)
@@ -659,6 +661,7 @@ function rendreJournal() {
     b.onmouseleave = () => masquerBulle();
     b.onclick = e => { e.stopPropagation(); afficherBulle(b); };   // fermeture : appui ailleurs ou défilement
   });
+  $$('#listeOps [data-modif-ticket]').forEach(b => b.onclick = e => { e.stopPropagation(); ouvrirTicket(b.dataset.modifTicket); });
   $$('#listeOps .op.groupe').forEach(el => {
     const g = el.dataset.groupe;
     $('.coche', el).onchange = e => {
@@ -814,6 +817,7 @@ function dateParDefaut() {
 function ouvrirFormulaire(opts) {
   opts = opts || {};
   edition = opts.op || null;
+  ticketEdition = null;
   // Modification depuis le journal : on retient où l'on était pour y revenir
   positionJournal = edition && vueCourante === 'journal' ? { y: window.scrollY, mois: moisJournal ? moisJournal.join('-') : '' } : null;
   const f = $('#formulaire'); f.reset();
@@ -837,8 +841,10 @@ function ouvrirFormulaire(opts) {
   $('#champPointe').hidden = !edition;
   $('#champPointeVers').hidden = true;
   $('#btnSupprimer').hidden = !edition;
+  $('#btnFavori').hidden = false;
   $('#champSuivantes').hidden = !(edition && edition.serie_id);
   $('#lignesVentilation').innerHTML = '';
+  $('#ventiler').disabled = false;
   $('#ventiler').checked = false; basculerVentilation();   // remet tout le formulaire hors ventilation
   $('#champFrequence').hidden = false;
 
@@ -949,7 +955,7 @@ function basculerVentilation() {
   majTotalVentilation();
 }
 
-function ajouterLigneVentilation() {
+function ajouterLigneVentilation(o) {
   const div = document.createElement('div');
   div.className = 'ligne-ventilation';
   div.innerHTML = '<input class="v-designation majuscules" autocapitalize="words" placeholder="Désignation">' +
@@ -962,13 +968,20 @@ function ajouterLigneVentilation() {
   $('.v-categorie', div).onchange = () => remplirSelect($('.v-sous', div), listeSousCategories($('.v-categorie', div).value), 'Sous-catégorie', '');
   $('.v-montant', div).oninput = majTotalVentilation;
   $('.suppr', div).onclick = () => { div.remove(); majTotalVentilation(); };
+  if (o) {   // ligne existante d'un ticket modifié
+    div.dataset.id = o.id;
+    $('.v-designation', div).value = o.designation || '';
+    $('.v-montant', div).value = String(Math.abs(Number(o.montant) || 0)).replace('.', ',');
+    remplirSelect($('.v-categorie', div), listeCategories(), 'Catégorie', o.categorie || '');
+    remplirSelect($('.v-sous', div), listeSousCategories(o.categorie || ''), 'Sous-catégorie', o.sous_categorie || '');
+  }
   return div;
 }
 
 function lignesVentilation() {
   return $$('#lignesVentilation .ligne-ventilation').map(div => ({
     designation: $('.v-designation', div).value.trim(), categorie: $('.v-categorie', div).value,
-    sous_categorie: $('.v-sous', div).value, montantTexte: $('.v-montant', div).value, div
+    sous_categorie: $('.v-sous', div).value, montantTexte: $('.v-montant', div).value, div, id: div.dataset.id || ''
   })).filter(l => l.designation || l.categorie || l.montantTexte);
 }
 
@@ -1052,7 +1065,7 @@ function enregistrer(ev) {
     const lignes = lignesVentilation();
     if (!lignes.length) { err.textContent = 'Ajoute au moins une ligne.'; return; }
     const ops = [];
-    const groupe = 'G-' + nouvelId();
+    const groupe = ticketEdition ? ticketEdition.groupe : 'G-' + nouvelId();
     const intitule = $('#intitule').value.trim();
     const toutesLignes = $$('#lignesVentilation .ligne-ventilation');
     lignes.forEach(l => {
@@ -1060,11 +1073,20 @@ function enregistrer(ev) {
       const n = ' (ligne ' + (toutesLignes.indexOf(l.div) + 1) + ')';
       ok &= marquer($('.v-designation', l.div), !!l.designation, 'désignation' + n) & marquer($('.v-categorie', l.div), !!l.categorie, 'catégorie' + n) &
         marquer($('.v-sous', l.div), !!l.sous_categorie, 'sous-catégorie' + n) & marquer($('.v-montant', l.div), v > 0, 'montant' + n);
-      ops.push(Object.assign({ id: nouvelId() }, commun, { designation: l.designation, categorie: l.categorie,
-        sous_categorie: l.sous_categorie, montant: signe(v || 0), pointe: false, serie_id: '', source: 'appli',
-        groupe, groupe_libelle: intitule }));
+      const ligne = Object.assign({ id: l.id || nouvelId() }, commun, { designation: l.designation, categorie: l.categorie,
+        sous_categorie: l.sous_categorie, montant: signe(v || 0), groupe, groupe_libelle: intitule });
+      if (!l.id) Object.assign(ligne, { pointe: false, serie_id: '', source: 'appli' });   // une ligne existante garde son pointage
+      ops.push(ligne);
     });
     if (!ok) { signalerManquants(); return; }
+    if (ticketEdition) {                                    // ticket modifié : mise à jour, ajouts et lignes retirées
+      const gardees = new Set(ops.map(o => o.id));
+      const retirees = ticketEdition.ids.filter(id => !gardees.has(id));
+      modifier(ops.map(o => ({ table: 'Operations', op: 'upsert', data: o }))
+        .concat(retirees.map(id => ({ table: 'Operations', op: 'delete', data: { id } }))));
+      ticketEdition = null;
+      return terminerSaisie(date, 'Ticket modifié : ' + ops.length + ' ligne' + (ops.length > 1 ? 's' : '') + (retirees.length ? ', ' + retirees.length + ' retirée' + (retirees.length > 1 ? 's' : '') : ''), ops.map(o => o.id));
+    }
     const frequenceV = $('#frequence').value;
     if (frequenceV !== 'UNE_FOIS') {                      // ticket ventilé récurrent : une série par ligne, même « ticket »
       const ticket = intitule || commun.enseigne || 'Ticket';
@@ -1247,6 +1269,12 @@ function dialogue(o) {
 }
 
 async function supprimerOperation() {
+  if (ticketEdition) {
+    const n = ticketEdition.ids.length;
+    if (!await dialogue({ titre: 'Supprimer le ticket', message: 'Les ' + n + ' lignes de ce ticket seront supprimées.', ok: 'Supprimer', danger: true })) return;
+    modifier(ticketEdition.ids.map(id => ({ table: 'Operations', op: 'delete', data: { id } })));
+    ticketEdition = null; toast('Ticket supprimé'); revenirAuJournal(); return;
+  }
   if (!edition) return;
   const serie = edition.serie_id && $('#suivantes').checked;
   if (!await dialogue(serie
@@ -1984,3 +2012,33 @@ function rendrePrevision() {
   });
   $$('#segVente button').forEach(b => b.onclick = () => { venteChoisie = b.dataset.vente; rendrePrevision(); });
 })();
+
+
+/* ===== Modifier un ticket ventilé en entier (lignes, intitulé, date, compte, paiement, enseigne) ===== */
+function ouvrirTicket(groupe) {
+  const enfants = data.Operations.filter(o => o.groupe === groupe).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  if (!enfants.length) return;
+  const o = enfants[0];
+  const pos = vueCourante === 'journal' ? { y: window.scrollY, mois: moisJournal ? moisJournal.join('-') : '' } : null;
+  ouvrirFormulaire();
+  ticketEdition = { groupe, ids: enfants.map(x => x.id) };
+  positionJournal = pos;
+  definirType(o.type);
+  $('#zoneRaccourcis').hidden = true;
+  $('#champFrequence').hidden = true;
+  $('#btnSupprimer').hidden = false;
+  $('#btnFavori').hidden = true;
+  $('#date').value = o.date;
+  remplirSelect($('#compte'), listeComptes(), '— choisir —', o.compte);
+  remplirSelect($('#paiement'), trierFr(data.Paiements.map(p => p.paiement)), '— choisir —', o.paiement);
+  remplirSelect($('#enseigne'), trierFr(data.Enseignes.map(e => e.enseigne)), '—', o.enseigne);
+  $('#commentaire').value = o.commentaire || '';
+  $('#lignesVentilation').innerHTML = '';
+  enfants.forEach(x => ajouterLigneVentilation(x));
+  $('#ventiler').checked = true; basculerVentilation();
+  $('#ventiler').disabled = true;   // un ticket reste ventilé
+  $('#champFrequence').hidden = true;
+  $('#intitule').value = o.groupe_libelle || '';
+  majEtoiles(); majDateTexte(); majTotalVentilation();
+  $('#titre').textContent = 'Modifier le ticket';
+}

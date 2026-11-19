@@ -870,3 +870,11 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 .prev-sc .patri { font-size: 12px; color: var(--discret); margin-top: 3px; }
 .prev-scenarios > p { grid-column: 1 / -1; margin: 0 0 4px; }
 @media (max-width: 699px) { .prev-sc .patri { grid-column: 2; text-align: right; } }
+
+/* Journal : bouton « Modifier le ticket » dans un ticket ventilé déplié */
+.sous-ops .btn-ticket { display: block; width: 100%; margin: 2px 0 4px; height: 36px; border-radius: 10px; border: 1px dashed rgba(0,180,255,.55);
+  background: rgba(0,180,255,.08); color: #7fd8ff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; transition: background .15s ease; }
+@media (hover: hover) { .sous-ops .btn-ticket:hover { background: rgba(0,180,255,.16); } }
+.sous-ops .btn-ticket:active { transform: scale(.98); }
+#ventiler:disabled { opacity: 1; accent-color: var(--bleu); }
+.actions > button:only-child, .actions > button[hidden] + button, .actions > button:first-child:has(+ button[hidden]) { grid-column: 1 / -1; flex: 1 1 100%; }
