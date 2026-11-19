@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.40.0';
+const VERSION_APP = '1.41.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -1768,11 +1768,41 @@ function calculBudget(b, y, m) {
   const nbMois = 13 - moisDebut;
   const finMois = ymd(y, m, joursDansMois(y, m));
   const depAvant = dansPeriode && m > moisDebut ? depenseBudget(b.cat, ymd(y, moisDebut, 1), ymd(y, m - 1, joursDansMois(y, m - 1))) : 0;
-  const alloue = dansPeriode ? Math.max(0, (b.annuel * nbMois / 12 - depAvant) / (13 - m)) : b.annuel / 12;
+  // Enveloppes annuelles (dépenses irrégulières, ex. Vacances) : lissage du reste de l'année.
+  // Autres catégories : l'objectif suit tes progrès (moyenne réelle des 3 mois précédents si plus basse, sans jamais remonter).
+  const alloue = estAnnuelle(b.cat)
+    ? (dansPeriode ? Math.max(0, (b.annuel * nbMois / 12 - depAvant) / (13 - m)) : b.annuel / 12)
+    : objectifSuivi(b, y, m);
   const depense = depenseBudget(b.cat, ymd(y, m, 1), finMois);
   const fixe = Math.max(0, depenseBudget(b.cat, ymd(y, m, 1), finMois, true));
   const anDepense = depenseBudget(b.cat, ymd(y, moisDebut > 12 ? 1 : moisDebut, 1), finMois);
   return { alloue, depense, fixe, reste: alloue - depense, anDepense, anBudget: b.annuel * (dansPeriode ? nbMois : 12) / 12 };
+}
+function estAnnuelle(cat) {
+  return String(param('budget_annuelles') || 'Vacances').split(';').map(x => x.trim()).includes(cat);
+}
+/** Dépense réelle d'une catégorie sur un mois (mise en cache pendant un affichage). */
+let cacheDepMois = {};
+function depenseMois(cat, ym) {
+  const k = cat + '|' + ym;
+  if (!(k in cacheDepMois)) { const [y, m] = ym.split('-').map(Number); cacheDepMois[k] = depenseBudget(cat, ymd(y, m, 1), ymd(y, m, joursDansMois(y, m))); }
+  return cacheDepMois[k];
+}
+/**
+ * Objectif qui suit tes progrès : chaque mois depuis le début du budget, l'objectif mensuel descend
+ * à la moyenne réelle des 3 mois précédents si elle est plus basse, et ne remonte jamais.
+ */
+function objectifSuivi(b, y, m) {
+  const base = b.annuel / 12, cible = y + '-' + String(m).padStart(2, '0');
+  let ym = String(param('budget_debut') || '2026-11'), obj = base;
+  if (cible < ym) return base;
+  const moisCourant = aujourdhui().slice(0, 7);
+  while (ym <= cible && ym <= moisCourant) {   // seuls des mois écoulés en entier servent de référence
+    const moy = Math.max(0, (depenseMois(b.cat, ajoutMois(ym, -1)) + depenseMois(b.cat, ajoutMois(ym, -2)) + depenseMois(b.cat, ajoutMois(ym, -3))) / 3);
+    obj = Math.min(obj, moy);
+    ym = ajoutMois(ym, 1);
+  }
+  return obj;
 }
 function rythmeMois(y, m) {
   const j = aujourdhui(), ym = j.slice(0, 7), cible = ymd(y, m, 1).slice(0, 7);
@@ -1791,6 +1821,7 @@ function etatBudget(x, avance) {
 
 function rendreBudget() {
   initialiserBudget();
+  cacheDepMois = {};
   const j = aujourdhui();
   if (!moisBudget) moisBudget = [Number(j.slice(0, 4)), Number(j.slice(5, 7))];
   const [y, m] = moisBudget;
@@ -1913,7 +1944,7 @@ function hyp(k) {
   if (p === '' || p == null) return h.v;
   return h.u === 'mois' ? String(p) : Number(String(p).replace(',', '.')) || 0;
 }
-const ajoutMois = (ym, n) => { let [y, m] = ym.split('-').map(Number); m += n; while (m > 12) { m -= 12; y++; } while (m < 1) { m += 12; y--; } return y + '-' + String(m).padStart(2, '0'); };
+function ajoutMois(ym, n) { let [y, m] = ym.split('-').map(Number); m += n; while (m > 12) { m -= 12; y++; } while (m < 1) { m += 12; y--; } return y + '-' + String(m).padStart(2, '0'); }
 
 function capitalDepart() {
   const j = aujourdhui();
