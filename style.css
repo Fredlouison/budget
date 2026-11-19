@@ -878,3 +878,9 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 .sous-ops .btn-ticket:active { transform: scale(.98); }
 #ventiler:disabled { opacity: 1; accent-color: var(--bleu); }
 .actions > button:only-child, .actions > button[hidden] + button, .actions > button:first-child:has(+ button[hidden]) { grid-column: 1 / -1; flex: 1 1 100%; }
+.ligne-budget .annuelle { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--discret); cursor: pointer; white-space: nowrap; }
+.ligne-budget .annuelle input { width: 16px; height: 16px; accent-color: var(--bleu); margin: 0; }
+.ligne-budget .annuelle:has(input:checked) { color: #7fd8ff; }
+@media (max-width: 699px) { .ligne-budget i { display: none; } .ligne-budget .annuelle { font-size: 11px; } }
+.ligne-budget .annuelle { width: auto !important; margin: 0 !important; padding: 0 !important; justify-content: flex-start !important; gap: 6px !important; }
+.ligne-budget .annuelle input { flex: 0 0 16px !important; width: 16px !important; height: 16px !important; }

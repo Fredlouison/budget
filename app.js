@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.41.0';
+const VERSION_APP = '1.42.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -1779,7 +1779,7 @@ function calculBudget(b, y, m) {
   return { alloue, depense, fixe, reste: alloue - depense, anDepense, anBudget: b.annuel * (dansPeriode ? nbMois : 12) / 12 };
 }
 function estAnnuelle(cat) {
-  return String(param('budget_annuelles') || 'Vacances').split(';').map(x => x.trim()).includes(cat);
+  return String(param('budget_annuelles') || 'Vacances;Voiture').split(';').map(x => x.trim()).includes(cat);
 }
 /** Dépense réelle d'une catégorie sur un mois (mise en cache pendant un affichage). */
 let cacheDepMois = {};
@@ -1867,8 +1867,16 @@ function rendreReglagesBudget() {
     .filter(c => c !== 'Ressource' && c !== 'Maman');
   $('#listeBudget').innerHTML = cats.map(c => {
     const b = budgets.find(x => x.cat === c);
-    return '<label class="ligne-budget"><span>' + esc(c) + '</span><input type="text" inputmode="decimal" data-budget="' + esc(c) + '" value="' + (b ? b.annuel : '') + '" placeholder="—"><em>€/an</em><i>' + (b ? euros(b.annuel / 12) + '/mois' : '') + '</i></label>';
+    return '<div class="ligne-budget"><span>' + esc(c) + '</span>' +
+      '<label class="annuelle" title="Enveloppe annuelle : répartie sur les mois restants, pour les dépenses irrégulières"><input type="checkbox" data-annuelle="' + esc(c) + '"' + (estAnnuelle(c) ? ' checked' : '') + '>Annuelle</label>' +
+      '<input type="text" inputmode="decimal" data-budget="' + esc(c) + '" value="' + (b ? b.annuel : '') + '" placeholder="—" aria-label="Budget annuel ' + esc(c) + '"><em>€/an</em><i>' + (b ? euros(b.annuel / 12) + '/mois' : '') + '</i></div>';
   }).join('') + '<div class="ligne-budget total"><span>Total</span><b>' + euros(budgets.reduce((t, b) => t + b.annuel, 0)) + '/an</b><i>' + euros(budgets.reduce((t, b) => t + b.annuel, 0) / 12) + '/mois</i></div>';
+  $$('[data-annuelle]').forEach(cb => cb.onchange = () => {
+    const liste = new Set(String(param('budget_annuelles') || 'Vacances;Voiture').split(';').map(x => x.trim()).filter(Boolean));
+    if (cb.checked) liste.add(cb.dataset.annuelle); else liste.delete(cb.dataset.annuelle);
+    modifier([{ table: 'Parametres', op: 'upsert', data: { cle: 'budget_annuelles', valeur: [...liste].join(';') || '-' } }]);
+    toast(cb.dataset.annuelle + (cb.checked ? ' : enveloppe annuelle' : ' : objectif qui suit tes progrès'));
+  });
   $$('[data-budget]').forEach(inp => inp.onchange = () => {
     const v = Math.round((Number(inp.value.replace(/\s/g, '').replace(',', '.')) || 0) * 100) / 100;
     modifier([{ table: 'Parametres', op: v > 0 ? 'upsert' : 'delete', data: { cle: 'budget:' + inp.dataset.budget, valeur: String(v) } }]);
