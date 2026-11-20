@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.42.0';
+const VERSION_APP = '1.43.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -282,6 +282,7 @@ function afficherVue(vue) {
   $$('.vue').forEach(s => { s.hidden = s.id !== 'vue-' + vue; });
   $$('.onglets button').forEach(b => b.classList.toggle('actif', b.dataset.vue === vue));
   document.body.classList.toggle('saisie', vue === 'saisie');
+  $('#oeilSoldes').hidden = vue !== 'accueil';
   $('#titre').textContent = { accueil: 'Soldes', journal: 'Journal', saisie: ticketEdition ? 'Modifier le ticket' : edition ? 'Modifier' : 'Nouvelle opération', reglages: 'Réglages', stats: 'Statistiques', budget: 'Budget' }[vue];
   window.scrollTo(0, 0);
   rendre();
@@ -2081,3 +2082,22 @@ function ouvrirTicket(groupe) {
   majEtoiles(); majDateTexte(); majTotalVentilation();
   $('#titre').textContent = 'Modifier le ticket';
 }
+
+
+/* ===== Soldes masqués : floutés à chaque ouverture sur mobile, œil pour les afficher ===== */
+const ICONE_OEIL = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+const ICONE_OEIL_BARRE = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2 12s3.6-7 10-7c2 0 3.7.7 5.1 1.6M22 12s-3.6 7-10 7c-2 0-3.7-.7-5.1-1.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.9 14.1a3 3 0 0 1 4.2-4.2M4 20 20 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+function majOeilSoldes() {
+  const masques = document.body.classList.contains('soldes-masques');
+  const b = $('#oeilSoldes');
+  b.innerHTML = masques ? ICONE_OEIL_BARRE : ICONE_OEIL;
+  b.classList.toggle('visible', !masques);
+  b.setAttribute('aria-pressed', String(!masques));
+  b.title = masques ? 'Afficher les soldes' : 'Masquer les soldes';
+}
+(function brancherOeilSoldes() {
+  document.body.classList.toggle('soldes-masques', window.matchMedia('(max-width: 699px)').matches);
+  $('#oeilSoldes').onclick = () => { document.body.classList.toggle('soldes-masques'); majOeilSoldes(); };
+  majOeilSoldes();
+  $('#oeilSoldes').hidden = vueCourante !== 'accueil';
+})();

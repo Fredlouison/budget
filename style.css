@@ -884,3 +884,14 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 @media (max-width: 699px) { .ligne-budget i { display: none; } .ligne-budget .annuelle { font-size: 11px; } }
 .ligne-budget .annuelle { width: auto !important; margin: 0 !important; padding: 0 !important; justify-content: flex-start !important; gap: 6px !important; }
 .ligne-budget .annuelle input { flex: 0 0 16px !important; width: 16px !important; height: 16px !important; }
+
+/* Soldes masqués (œil centré dans la barre du haut, onglet Soldes) */
+.barre { position: sticky; }
+.oeil-soldes { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); width: 44px; height: 36px; border: 0; border-radius: 12px;
+  background: transparent; color: #4b5563; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: color .15s ease, background .15s ease; }
+.oeil-soldes.visible { color: var(--vert); filter: drop-shadow(0 0 6px rgba(0,255,127,.55)); }
+.oeil-soldes:active { transform: translateX(-50%) scale(.94); }
+.oeil-soldes[hidden] { display: none !important; }
+body.soldes-masques #vue-accueil .hero-montant,
+body.soldes-masques #vue-accueil .montant-carte { filter: blur(11px); user-select: none; transition: filter .2s ease; }
+#vue-accueil .hero-montant, #vue-accueil .montant-carte { transition: filter .2s ease; }
