@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.44.0';
+const VERSION_APP = '1.45.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -1654,12 +1654,14 @@ function rendreStats() {
     '<div class="carte stat-chiffre"><span class="lib">' + (net >= 0 ? 'Épargne' : 'Déficit') + '</span><b class="' + (net >= 0 ? 'pos' : 'neg') + '">' + euros(net) + '</b></div>';
   rendreBarresStats(y, annee ? 0 : m, compte);
   rendreCategoriesStats(ops);
-  rendreLieuxStats(ops);
+  // Vacances par lieu : toujours l'année entière (un séjour peut chevaucher deux mois).
+  rendreLieuxStats(annee ? ops : opsStats(ymd(y, 1, 1), ymd(y, 12, 31), compte), y);
 }
 
 let statLieuOuvert = '';
 /** Dépenses Vacances regroupées par lieu (carte masquée s'il n'y en a pas sur la période). */
-function rendreLieuxStats(ops) {
+function rendreLieuxStats(ops, annee) {
+  $('#titreLieux').textContent = 'Vacances par lieu · ' + annee;
   const parLieu = {};
   ops.filter(o => o.type === 'DEPENSE' && o.categorie === 'Vacances').forEach(o => {
     const l = lieuVacances(o) || 'Sans lieu', s = o.sous_categorie || '—', v = -(Number(o.montant) || 0) * partCompte(o.compte);
@@ -1685,7 +1687,7 @@ function rendreLieuxStats(ops) {
       '<div class="jauge"><span style="width:' + (x.total / max * 100).toFixed(2) + '%"></span></div>' + sous + '</div>';
   }).join('') + '</div>';
   $$('#statLieux [data-lieu]').forEach(el => el.onclick = e => {
-    e.stopPropagation(); statLieuOuvert = statLieuOuvert === el.dataset.lieu ? '' : el.dataset.lieu; rendreLieuxStats(ops);
+    e.stopPropagation(); statLieuOuvert = statLieuOuvert === el.dataset.lieu ? '' : el.dataset.lieu; rendreLieuxStats(ops, annee);
   });
 }
 
