@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.43.0';
+const VERSION_APP = '1.44.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -590,6 +590,9 @@ function rendreJournal() {
   // Titre : « Enseigne — Désignation » (sauf détail d'un ticket ventilé, dont l'enseigne est déjà dans l'en-tête).
   const titreOp = (o, extra) => {
     const d = o.designation || o.sous_categorie || '';
+    // Vacances : « LIEU — Enseigne — Sous-catégorie »
+    const lieu = extra ? '' : lieuVacances(o);
+    if (lieu) return [lieu, o.enseigne, o.sous_categorie].filter(Boolean).join(' — ');
     if (extra || o.type === 'VIREMENT' || !o.enseigne) return d || o.enseigne || '';
     if (!d || d.toLowerCase() === String(o.enseigne).toLowerCase()) return o.enseigne;
     return o.enseigne + ' — ' + d;
@@ -914,6 +917,13 @@ function appliquerFavori(f) {
   majEtoiles();
   modifier([{ table: 'Favoris', op: 'upsert', data: { id: f.id, utilisations: (Number(f.utilisations) || 0) + 1 } }]);
   $('#montant').focus();
+}
+
+/** Lieu de vacances d'une dépense : le ou les mots en MAJUSCULES au début de la désignation (« SARLAT Carburant » → « SARLAT »). */
+function lieuVacances(o) {
+  if (!o || o.categorie !== 'Vacances' || o.type === 'VIREMENT') return '';
+  const m = String(o.designation || '').trim().match(/^([A-ZÀ-ÖØ-Þ][A-ZÀ-ÖØ-Þ'’-]+(?:\s+[A-ZÀ-ÖØ-Þ][A-ZÀ-ÖØ-Þ'’-]+)*)(?=\s|$)/);
+  return m ? m[1] : '';
 }
 
 function appliquerVacances(sc) {
@@ -1644,6 +1654,39 @@ function rendreStats() {
     '<div class="carte stat-chiffre"><span class="lib">' + (net >= 0 ? 'Épargne' : 'Déficit') + '</span><b class="' + (net >= 0 ? 'pos' : 'neg') + '">' + euros(net) + '</b></div>';
   rendreBarresStats(y, annee ? 0 : m, compte);
   rendreCategoriesStats(ops);
+  rendreLieuxStats(ops);
+}
+
+let statLieuOuvert = '';
+/** Dépenses Vacances regroupées par lieu (carte masquée s'il n'y en a pas sur la période). */
+function rendreLieuxStats(ops) {
+  const parLieu = {};
+  ops.filter(o => o.type === 'DEPENSE' && o.categorie === 'Vacances').forEach(o => {
+    const l = lieuVacances(o) || 'Sans lieu', s = o.sous_categorie || '—', v = -(Number(o.montant) || 0) * partCompte(o.compte);
+    parLieu[l] = parLieu[l] || { total: 0, n: 0, sous: {} };
+    parLieu[l].total += v; parLieu[l].n++; parLieu[l].sous[s] = (parLieu[l].sous[s] || 0) + v;
+  });
+  const liste = Object.entries(parLieu).map(([nom, x]) => Object.assign({ nom }, x)).filter(x => x.total > 0.004)
+    .sort((a, b) => (a.nom === 'Sans lieu') - (b.nom === 'Sans lieu') || b.total - a.total);
+  const carte = $('#carteLieux');
+  carte.hidden = !liste.length;
+  if (!liste.length) return;
+  const total = liste.reduce((t, x) => t + x.total, 0), max = Math.max(...liste.map(x => x.total));
+  let i = 0;
+  liste.forEach(x => { x.couleur = x.nom === 'Sans lieu' ? '#5b636d' : COULEURS_STATS[i++ % COULEURS_STATS.length]; });
+  if (statLieuOuvert && !liste.some(x => x.nom === statLieuOuvert)) statLieuOuvert = '';
+  const pc = v => { const p = v * 100; return (p < 10 ? p.toFixed(1) : p.toFixed(0)).replace('.', ',') + ' %'; };
+  $('#statLieux').innerHTML = '<div class="lieux-total"><span>Total vacances</span><b>' + euros(total) + '</b></div><div class="liste-cats">' + liste.map(x => {
+    const ouvert = statLieuOuvert === x.nom;
+    const sous = ouvert ? '<div class="stat-sous">' + Object.entries(x.sous).filter(([, v]) => v > 0.004).sort((a, b) => b[1] - a[1]).map(([n, v]) =>
+      '<div class="ligne-sous"><span class="n">' + esc(n) + '</span><span class="pc">' + pc(v / x.total) + '</span><b>' + euros(v) + '</b></div>').join('') + '</div>' : '';
+    return '<div class="stat-cat' + (ouvert ? ' ouverte' : '') + '" data-lieu="' + esc(x.nom) + '" style="--c:' + x.couleur + '">' +
+      '<div class="tete"><i class="pt"></i><span class="n">' + esc(x.nom) + ' <small class="nb-ops">' + x.n + ' op.</small></span><span class="pc">' + pc(x.total / total) + '</span><b>' + euros(x.total) + '</b><span class="chevron">›</span></div>' +
+      '<div class="jauge"><span style="width:' + (x.total / max * 100).toFixed(2) + '%"></span></div>' + sous + '</div>';
+  }).join('') + '</div>';
+  $$('#statLieux [data-lieu]').forEach(el => el.onclick = e => {
+    e.stopPropagation(); statLieuOuvert = statLieuOuvert === el.dataset.lieu ? '' : el.dataset.lieu; rendreLieuxStats(ops);
+  });
 }
 
 function rendreBarresStats(y, moisActif, compte) {

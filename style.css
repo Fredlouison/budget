@@ -895,3 +895,9 @@ details.autres > summary { padding: 10px 0; color: var(--texte); font-weight: 70
 body.soldes-masques #vue-accueil .hero-montant,
 body.soldes-masques #vue-accueil .montant-carte { filter: blur(11px); user-select: none; transition: filter .2s ease; }
 #vue-accueil .hero-montant, #vue-accueil .montant-carte { transition: filter .2s ease; }
+
+/* Stats : dépenses de vacances par lieu */
+.lieux-total { display: flex; justify-content: space-between; align-items: baseline; margin: 2px 0 10px; padding-bottom: 10px; border-bottom: 1px solid var(--bord); }
+.lieux-total span { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--discret); }
+.lieux-total b { font-size: 20px; font-weight: 800; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: var(--rouge); }
+#statLieux .nb-ops { margin-left: 4px; font-size: 11px; font-weight: 400; color: var(--discret); }
