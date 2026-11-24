@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.46.1';
+const VERSION_APP = '1.46.2';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -736,7 +736,7 @@ function compteEspeces() {
 
 /** « Espèces commun » : espèces retirées du compte commun (compte partagé). */
 const sansAccents = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-function compteEspecesCommun() { return listeComptes().find(n => /^especes commun$/i.test(sansAccents(n).trim())) || ''; }
+function compteEspecesCommun() { return listeComptes().find(n => /^especes? commun$/i.test(sansAccents(n).trim())) || ''; }
 const estCompteCommun = n => /^compte commun$/i.test(sansAccents(n).trim());
 /** Compte d'arrivée d'un retrait : Espèces commun si on retire du compte commun, sinon Espèces. */
 function versRetrait(depart) {
