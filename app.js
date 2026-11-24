@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.46.0';
+const VERSION_APP = '1.46.1';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -738,19 +738,16 @@ function compteEspeces() {
 const sansAccents = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function compteEspecesCommun() { return listeComptes().find(n => /^especes commun$/i.test(sansAccents(n).trim())) || ''; }
 const estCompteCommun = n => /^compte commun$/i.test(sansAccents(n).trim());
-/** Compte d'arrivée proposé pour un mouvement : Compte commun → Espèces commun ; retrait → Espèces. */
-function versPropose(depart, type) {
-  if (estCompteCommun(depart) && compteEspecesCommun()) return compteEspecesCommun();
-  return type === 'RETRAIT' ? compteEspeces() : '';
+/** Compte d'arrivée d'un retrait : Espèces commun si on retire du compte commun, sinon Espèces. */
+function versRetrait(depart) {
+  return (estCompteCommun(depart) && compteEspecesCommun()) || compteEspeces();
 }
-let versAuto = false;   // vrai tant que le compte d'arrivée a été proposé par l'appli (pas choisi à la main)
 
 function definirType(type) {
   typeCourant = type;
   $$('#segType button').forEach(b => b.classList.toggle('actif', b.dataset.type === type));
   const vir = type === 'VIREMENT' || type === 'RETRAIT';
-  if (type === 'RETRAIT') { $('#vers').value = versPropose($('#compte').value, 'RETRAIT'); versAuto = true; }   // retrait = mouvement vers Espèces (ou Espèces commun)
-  else if (type === 'VIREMENT' && !edition && estCompteCommun($('#compte').value) && (!$('#vers').value || versAuto)) { $('#vers').value = versPropose($('#compte').value, type); versAuto = true; }
+  if (type === 'RETRAIT') $('#vers').value = versRetrait($('#compte').value);   // retrait = mouvement vers Espèces (Espèces commun depuis le compte commun)
   // Retrait : désignation automatique « Retrait <compte> → <vers> », non modifiable
   const desi = $('#designation');
   const etaitAuto = desi.readOnly;
@@ -834,7 +831,6 @@ function ouvrirFormulaire(opts) {
   opts = opts || {};
   edition = opts.op || null;
   ticketEdition = null;
-  versAuto = false;
   // Modification depuis le journal : on retient où l'on était pour y revenir
   positionJournal = edition && vueCourante === 'journal' ? { y: window.scrollY, mois: moisJournal ? moisJournal.join('-') : '' } : null;
   const f = $('#formulaire'); f.reset();
@@ -1572,16 +1568,8 @@ function brancher() {
     majEtoiles();
   };
   $('#paiement').onchange = majEtoiles;
-  $('#vers').addEventListener('change', () => { versAuto = false; });   // choix à la main : on n'y touche plus
-  // Mouvement depuis le compte commun : arrivée proposée « Espèces commun » (modifiable)
-  $('#compte').addEventListener('change', () => {
-    if (typeCourant !== 'VIREMENT' && typeCourant !== 'RETRAIT') return;
-    const vers = $('#vers').value, propose = versPropose($('#compte').value, typeCourant);
-    const especes = compteEspeces(), espCommun = compteEspecesCommun();
-    if (versAuto || !vers || vers === especes || (vers === espCommun && !estCompteCommun($('#compte').value))) {
-      if (propose || versAuto) { $('#vers').value = propose; versAuto = !!propose; }
-    }
-  });
+  // Retrait : le compte d'arrivée suit le compte de départ (compte commun → Espèces commun)
+  $('#compte').addEventListener('change', () => { if (typeCourant === 'RETRAIT') $('#vers').value = versRetrait($('#compte').value); });
   $('#vers').addEventListener('change', majDesignationRetrait);
   $('#compte').addEventListener('change', majDesignationRetrait);
   $('#designation').onchange = completerDepuisHistorique;
