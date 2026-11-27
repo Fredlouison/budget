@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.46.3';
+const VERSION_APP = '1.47.0';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -986,7 +986,15 @@ function ajouterLigneVentilation(o) {
   $('#lignesVentilation').appendChild(div);
   remplirSelect($('.v-categorie', div), listeCategories(), 'Catégorie', '');
   remplirSelect($('.v-sous', div), [], 'Sous-catégorie', '');
-  $('.v-categorie', div).onchange = () => remplirSelect($('.v-sous', div), listeSousCategories($('.v-categorie', div).value), 'Sous-catégorie', '');
+  $('.v-categorie', div).onchange = () => remplirSousVentilation(div, '');
+  $('.v-sous', div).onchange = async () => {   // « + Nouvelle sous-catégorie… »
+    if ($('.v-sous', div).value !== NOUVELLE_SC) return;
+    const cat = $('.v-categorie', div).value;
+    if (!cat) { toast('Choisis d\'abord une catégorie.', true); remplirSousVentilation(div, ''); return; }
+    const r = await dialogue({ titre: 'Nouvelle sous-catégorie', message: 'Dans la catégorie « ' + cat + ' »', champs: [{ label: 'Sous-catégorie', placeholder: 'Ex : Cinéma' }], ok: 'Ajouter' });
+    if (r) modifier([{ table: 'Categories', op: 'upsert', data: { categorie: cat, sous_categorie: r[0] } }]);
+    $$('#lignesVentilation .ligne-ventilation').forEach(d => { if ($('.v-categorie', d).value === cat) remplirSousVentilation(d, d === div ? (r ? r[0] : '') : $('.v-sous', d).value); });
+  };
   $('.v-montant', div).oninput = majTotalVentilation;
   $('.suppr', div).onclick = () => { div.remove(); majTotalVentilation(); };
   if (o) {   // ligne existante d'un ticket modifié
@@ -994,9 +1002,16 @@ function ajouterLigneVentilation(o) {
     $('.v-designation', div).value = o.designation || '';
     $('.v-montant', div).value = String(Math.abs(Number(o.montant) || 0)).replace('.', ',');
     remplirSelect($('.v-categorie', div), listeCategories(), 'Catégorie', o.categorie || '');
-    remplirSelect($('.v-sous', div), listeSousCategories(o.categorie || ''), 'Sous-catégorie', o.sous_categorie || '');
+    remplirSousVentilation(div, o.sous_categorie || '');
   }
   return div;
+}
+const NOUVELLE_SC = '__nouvelle_sc__';
+/** Sous-catégories d'une ligne ventilée, avec en dernier « + Nouvelle sous-catégorie… ». */
+function remplirSousVentilation(div, valeur) {
+  const sel = $('.v-sous', div), cat = $('.v-categorie', div).value;
+  remplirSelect(sel, listeSousCategories(cat), 'Sous-catégorie', valeur);
+  if (cat) { const opt = document.createElement('option'); opt.value = NOUVELLE_SC; opt.textContent = '+ Nouvelle sous-catégorie…'; sel.appendChild(opt); }
 }
 
 function lignesVentilation() {
@@ -1268,19 +1283,21 @@ function dialogue(o) {
     $('#dlgIcone').innerHTML = ICONES_DLG[o.danger ? 'danger' : champs.length ? 'saisie' : 'info'];
     $('#dlgTitre').textContent = o.titre || '';
     $('#dlgMessage').textContent = o.message || ''; $('#dlgMessage').hidden = !o.message;
-    $('#dlgChamps').innerHTML = champs.map((c, i) => '<label class="champ">' + esc(c.label) +
-      '<input class="majuscules" autocapitalize="words" autocomplete="off" data-dlg="' + i + '" placeholder="' + esc(c.placeholder || '') + '" value="' + esc(c.valeur || '') + '"></label>').join('');
+    $('#dlgChamps').innerHTML = champs.map((c, i) => '<label class="champ">' + esc(c.label) + (c.options
+      ? '<select data-dlg="' + i + '"><option value="">— choisir —</option>' + c.options.map(v => '<option' + (v === c.valeur ? ' selected' : '') + '>' + esc(v) + '</option>').join('') + '</select>'
+      : '<input class="majuscules" autocapitalize="words" autocomplete="off" data-dlg="' + i + '" placeholder="' + esc(c.placeholder || '') + '" value="' + esc(c.valeur || '') + '">') + '</label>').join('');
     $('#dlgOk').textContent = o.ok || 'OK';
     fen.hidden = false;
-    const premier = $('#dlgChamps input');
-    setTimeout(() => (premier ? (premier.focus(), premier.select()) : $('#dlgOk').focus()), 30);
+    const premier = $('#dlgChamps [data-dlg]');
+    setTimeout(() => (premier ? (premier.focus(), premier.select && premier.select()) : $('#dlgOk').focus()), 30);
     const fermer = v => { fen.hidden = true; $('#dlgForm').onsubmit = $('#dlgAnnuler').onclick = fen.onclick = document.onkeydown = null; resoudre(v); };
     $('#dlgForm').onsubmit = e => {
       e.preventDefault();
       if (!champs.length) return fermer(true);
-      const vals = $$('#dlgChamps input').map(i => majusculesMots(i.value.trim()));
+      const els = $$('#dlgChamps [data-dlg]');
+      const vals = els.map(i => i.tagName === 'SELECT' ? i.value : majusculesMots(i.value.trim()));
       const vide = vals.findIndex(v => !v);
-      if (vide >= 0) { const i = $$('#dlgChamps input')[vide]; i.classList.add('invalide'); i.focus(); return; }
+      if (vide >= 0) { els[vide].classList.add('invalide'); els[vide].focus(); return; }
       fermer(vals);
     };
     $('#dlgAnnuler').onclick = () => fermer(champs.length ? null : false);
@@ -1381,6 +1398,8 @@ function rendreReglages(erreur) {
     '<button type="button" data-fiche="' + esc(c.nom) + '">Modifier</button></div>').join('') || '<p class="discret">Aucun compte.</p>';
   $$('[data-fiche]').forEach(b => b.onclick = () => ouvrirFicheCompte(b.dataset.fiche));
   $$('#listeComptesReglages .poignee').forEach(activerGlisser);
+
+  rendreCategoriesReglages();
 
   $('#listeFavoris').innerHTML = data.Favoris.slice().sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr')).map(f =>
     '<div class="item"><span>' + esc(f.nom) + '<span class="sous">' + esc([f.categorie, f.sous_categorie, f.compte].filter(Boolean).join(' › ')) + '</span></span>' +
@@ -1531,6 +1550,7 @@ function brancher() {
     if (b.dataset.vue === 'saisie') ouvrirFormulaire(); else afficherVue(b.dataset.vue);
   });
   $('#fermerChoix').onclick = () => { $('#choixCompte').hidden = true; };
+  $('#btnAjoutCategorie').onclick = ajouterCategorieReglages;
   $('#btnAjoutCompte').onclick = () => ouvrirFicheCompte(null);
   $('#fcEnregistrer').onclick = enregistrerFicheCompte;
   $('#fcAnnuler').onclick = () => { $('#ficheCompte').hidden = true; };
@@ -2158,3 +2178,156 @@ function majOeilSoldes() {
   majOeilSoldes();
   $('#oeilSoldes').hidden = vueCourante !== 'accueil';
 })();
+
+
+/* ================= Réglages : catégories ================= */
+
+const TABLES_CATEGORISEES = ['Operations', 'Series', 'Favoris'];
+const ouvertesCat = new Set();   // catégories dépliées (gardées ouvertes après une modification)
+
+function usageCategorie(cat, sc) {
+  let n = 0;
+  for (const t of TABLES_CATEGORISEES) for (const o of data[t] || []) if (o.categorie === cat && (sc === undefined || o.sous_categorie === sc)) n++;
+  return n;
+}
+const pluriel = (n, mot) => n + ' ' + mot + (n > 1 ? 's' : '');
+
+function rendreCategoriesReglages() {
+  const el = $('#listeCategoriesReglages'); if (!el) return;
+  el.innerHTML = listeCategories().map(cat => {
+    const sous = listeSousCategories(cat).filter(Boolean);
+    return '<details class="cat-reglage"' + (ouvertesCat.has(cat) ? ' open' : '') + ' data-cat="' + esc(cat) + '"><summary><span class="corps-item">' + esc(cat) +
+      '<span class="sous">' + pluriel(sous.length, 'sous-catégorie') + ' · ' + pluriel(usageCategorie(cat), 'opération') + '</span></span></summary>' +
+      sous.map(sc => '<div class="item"><span class="corps-item">' + esc(sc) + '<span class="sous">' + pluriel(usageCategorie(cat, sc), 'opération') + '</span></span>' +
+        '<span class="actions-item"><button type="button" data-ren-sc="' + esc(sc) + '">Renommer</button><button type="button" class="suppr-item" data-sup-sc="' + esc(sc) + '" aria-label="Supprimer">✕</button></span></div>').join('') +
+      '<div class="actions-cat"><button type="button" class="secondaire" data-ajout-sc>+ Sous-catégorie</button><button type="button" class="secondaire" data-ren-cat>Renommer</button><button type="button" class="secondaire danger-txt" data-sup-cat>Supprimer</button></div>' +
+      '</details>';
+  }).join('') || '<p class="discret">Aucune catégorie.</p>';
+  $$('#listeCategoriesReglages .cat-reglage').forEach(d => {
+    const cat = d.dataset.cat;
+    d.ontoggle = () => { if (d.open) ouvertesCat.add(cat); else ouvertesCat.delete(cat); };
+    $$('[data-ren-sc]', d).forEach(b => b.onclick = () => renommerSousCategorie(cat, b.dataset.renSc));
+    $$('[data-sup-sc]', d).forEach(b => b.onclick = () => supprimerSousCategorie(cat, b.dataset.supSc));
+    $('[data-ajout-sc]', d).onclick = () => ajouterSousCategorieReglages(cat);
+    $('[data-ren-cat]', d).onclick = () => renommerCategorie(cat);
+    $('[data-sup-cat]', d).onclick = () => supprimerCategorie(cat);
+  });
+}
+
+/** Déplace tout ce qui utilise (cat, sc) — ou toute la catégorie si sc est undefined — vers (nCat, nSc ou même sous-catégorie). */
+function mutationsReport(cat, sc, nCat, nSc) {
+  const muts = [];
+  for (const t of TABLES_CATEGORISEES) for (const o of data[t] || []) {
+    if (o.categorie !== cat || (sc !== undefined && o.sous_categorie !== sc)) continue;
+    const cle = t === 'Favoris' || t === 'Series' || t === 'Operations' ? { id: o.id } : {};
+    muts.push({ table: t, op: 'upsert', data: Object.assign(cle, { categorie: nCat, sous_categorie: nSc === undefined ? o.sous_categorie : nSc }) });
+  }
+  return muts;
+}
+/** Paramètres du budget qui citent la catégorie (enveloppe, hors budget, enveloppes annuelles). */
+function mutationsParametresCategorie(cat, sc, nCat, nSc) {
+  const muts = [];
+  const remplace = (cle, defaut, f) => {
+    const avant = String(param(cle) || defaut); if (!avant) return;
+    const apres = [...new Set(avant.split(';').map(x => x.trim()).filter(Boolean).map(f))].join(';');
+    if (apres !== avant) muts.push({ table: 'Parametres', op: 'upsert', data: { cle, valeur: apres || '-' } });
+  };
+  if (sc === undefined) {
+    const b = param('budget:' + cat);
+    if (b && nCat) {
+      const existant = Number(String(param('budget:' + nCat) || 0).replace(',', '.')) || 0;
+      muts.push({ table: 'Parametres', op: 'delete', data: { cle: 'budget:' + cat } });
+      muts.push({ table: 'Parametres', op: 'upsert', data: { cle: 'budget:' + nCat, valeur: String(Math.round((existant + (Number(String(b).replace(',', '.')) || 0)) * 100) / 100) } });
+    } else if (b) muts.push({ table: 'Parametres', op: 'delete', data: { cle: 'budget:' + cat } });
+    remplace('budget_hors', BUDGET_HORS_DEFAUT, x => x === cat ? nCat || '' : x.startsWith(cat + '/') ? (nCat ? nCat + x.slice(cat.length) : '') : x);
+    remplace('budget_annuelles', 'Vacances;Voiture', x => x === cat ? nCat || '' : x);
+  } else {
+    remplace('budget_hors', BUDGET_HORS_DEFAUT, x => x === cat + '/' + sc ? (nCat ? nCat + '/' + nSc : '') : x);
+  }
+  return muts.filter(m => m.data.valeur !== '' || m.op === 'delete');
+}
+
+async function ajouterCategorieReglages() {
+  const r = await dialogue({ titre: 'Nouvelle catégorie', champs: [{ label: 'Catégorie', placeholder: 'Ex : Loisirs' }, { label: 'Première sous-catégorie', placeholder: 'Ex : Cinéma' }], ok: 'Ajouter' }); if (!r) return;
+  ouvertesCat.add(r[0]);
+  modifier([{ table: 'Categories', op: 'upsert', data: { categorie: r[0], sous_categorie: r[1] } }]);
+  toast('Catégorie ajoutée');
+}
+async function ajouterSousCategorieReglages(cat) {
+  const r = await dialogue({ titre: 'Nouvelle sous-catégorie', message: 'Dans la catégorie « ' + cat + ' »', champs: [{ label: 'Sous-catégorie', placeholder: 'Ex : Cinéma' }], ok: 'Ajouter' }); if (!r) return;
+  ouvertesCat.add(cat);
+  modifier([{ table: 'Categories', op: 'upsert', data: { categorie: cat, sous_categorie: r[0] } }]);
+  toast('Sous-catégorie ajoutée');
+}
+
+async function renommerCategorie(cat) {
+  const r = await dialogue({ titre: 'Renommer la catégorie', message: 'Le nouveau nom sera reporté sur toutes les opérations, récurrentes, favoris et le budget.', champs: [{ label: 'Nouveau nom', valeur: cat }], ok: 'Renommer' }); if (!r) return;
+  const nom = r[0]; if (nom === cat) return;
+  if (listeCategories().some(c => c !== cat && c.toLowerCase() === nom.toLowerCase())
+    && !await dialogue({ titre: 'Fusionner', message: '« ' + nom + ' » existe déjà : les deux catégories seront fusionnées.', ok: 'Fusionner' })) return;
+  const cible = listeCategories().find(c => c !== cat && c.toLowerCase() === nom.toLowerCase()) || nom;
+  const muts = [];
+  data.Categories.filter(c => c.categorie === cat).forEach(c => {
+    muts.push({ table: 'Categories', op: 'delete', data: { categorie: cat, sous_categorie: c.sous_categorie } });
+    muts.push({ table: 'Categories', op: 'upsert', data: { categorie: cible, sous_categorie: c.sous_categorie } });
+  });
+  muts.push(...mutationsReport(cat, undefined, cible), ...mutationsParametresCategorie(cat, undefined, cible));
+  ouvertesCat.delete(cat); ouvertesCat.add(cible);
+  modifier(muts);
+  toast('Catégorie renommée');
+}
+
+async function renommerSousCategorie(cat, sc) {
+  const r = await dialogue({ titre: 'Renommer la sous-catégorie', message: 'Dans « ' + cat + ' ». Le nouveau nom sera reporté sur toutes les opérations, récurrentes et favoris.', champs: [{ label: 'Nouveau nom', valeur: sc }], ok: 'Renommer' }); if (!r) return;
+  const nom = r[0]; if (nom === sc) return;
+  const existante = listeSousCategories(cat).find(s => s !== sc && s.toLowerCase() === nom.toLowerCase());
+  if (existante && !await dialogue({ titre: 'Fusionner', message: '« ' + existante + ' » existe déjà dans « ' + cat + ' » : les deux sous-catégories seront fusionnées.', ok: 'Fusionner' })) return;
+  const cible = existante || nom;
+  modifier([{ table: 'Categories', op: 'delete', data: { categorie: cat, sous_categorie: sc } },
+    { table: 'Categories', op: 'upsert', data: { categorie: cat, sous_categorie: cible } },
+    ...mutationsReport(cat, sc, cat, cible), ...mutationsParametresCategorie(cat, sc, cat, cible)]);
+  toast('Sous-catégorie renommée');
+}
+
+/** Liste « Catégorie › Sous-catégorie » des destinations possibles (sauf ce qu'on supprime). */
+function destinations(exclureCat, exclureSc) {
+  const l = [];
+  listeCategories().forEach(c => listeSousCategories(c).filter(Boolean).forEach(s => {
+    if (c === exclureCat && (exclureSc === undefined || s === exclureSc)) return;
+    l.push(c + ' › ' + s);
+  }));
+  return l;
+}
+
+async function supprimerSousCategorie(cat, sc) {
+  const n = usageCategorie(cat, sc);
+  const muts = [{ table: 'Categories', op: 'delete', data: { categorie: cat, sous_categorie: sc } }];
+  if (!n) {
+    if (!await dialogue({ titre: 'Supprimer la sous-catégorie', message: '« ' + cat + ' › ' + sc + ' » n\'est utilisée nulle part.', ok: 'Supprimer', danger: true })) return;
+    muts.push(...mutationsParametresCategorie(cat, sc, '', ''));
+  } else {
+    const r = await dialogue({ titre: 'Supprimer la sous-catégorie', message: '« ' + cat + ' › ' + sc + ' » est utilisée par ' + pluriel(n, 'opération') + ' (récurrentes et favoris compris). Vers où les déplacer ?',
+      champs: [{ label: 'Déplacer vers', options: destinations(cat, sc), valeur: '' }], ok: 'Déplacer', danger: true }); if (!r) return;
+    const [nCat, nSc] = r[0].split(' › ');
+    muts.push(...mutationsReport(cat, sc, nCat, nSc), ...mutationsParametresCategorie(cat, sc, nCat, nSc));
+  }
+  modifier(muts);
+  toast('Sous-catégorie supprimée');
+}
+
+async function supprimerCategorie(cat) {
+  const n = usageCategorie(cat);
+  const muts = data.Categories.filter(c => c.categorie === cat).map(c => ({ table: 'Categories', op: 'delete', data: { categorie: cat, sous_categorie: c.sous_categorie } }));
+  if (!n) {
+    if (!await dialogue({ titre: 'Supprimer la catégorie', message: '« ' + cat + ' » et ses sous-catégories ne sont utilisées nulle part.', ok: 'Supprimer', danger: true })) return;
+    muts.push(...mutationsParametresCategorie(cat, undefined, ''));
+  } else {
+    const r = await dialogue({ titre: 'Supprimer la catégorie', message: '« ' + cat + ' » est utilisée par ' + pluriel(n, 'opération') + ' (récurrentes et favoris compris). Vers quelle sous-catégorie les déplacer ?',
+      champs: [{ label: 'Déplacer vers', options: destinations(cat), valeur: '' }], ok: 'Déplacer', danger: true }); if (!r) return;
+    const [nCat, nSc] = r[0].split(' › ');
+    muts.push(...mutationsReport(cat, undefined, nCat, nSc), ...mutationsParametresCategorie(cat, undefined, nCat));
+  }
+  ouvertesCat.delete(cat);
+  modifier(muts);
+  toast('Catégorie supprimée');
+}

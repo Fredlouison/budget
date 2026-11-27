@@ -901,3 +901,21 @@ body.soldes-masques #vue-accueil .montant-carte { filter: blur(11px); user-selec
 .lieux-total span { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--discret); }
 .lieux-total b { font-size: 20px; font-weight: 800; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: var(--rouge); }
 #statLieux .nb-ops { margin-left: 4px; font-size: 11px; font-weight: 400; color: var(--discret); }
+
+/* ===== Réglages : catégories ===== */
+.dialogue #dlgChamps select { width: 100%; margin-top: 4px; }
+.cat-reglage { border-bottom: 1px solid var(--bord); }
+.cat-reglage > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 10px 0; font-size: 14px; font-weight: 700; }
+.cat-reglage > summary::-webkit-details-marker { display: none; }
+.cat-reglage > summary::after { content: "›"; color: var(--discret); font-size: 18px; transition: transform .15s ease; }
+.cat-reglage[open] > summary::after { transform: rotate(90deg); color: var(--vert); }
+.cat-reglage > summary .corps-item { flex: 1 1 auto; min-width: 0; }
+.cat-reglage > summary .sous { display: block; font-size: 12px; font-weight: 400; color: var(--discret); }
+.cat-reglage .item { padding-left: 14px; border-left: 2px solid #1f3a2b; }
+.cat-reglage .item .corps-item { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-reglage .actions-item { display: flex; gap: 6px; flex: 0 0 auto; }
+.cat-reglage .suppr-item { width: 34px; padding: 5px 0 !important; }
+.cat-reglage .suppr-item:hover { color: var(--rouge); border-color: var(--rouge) !important; }
+.actions-cat { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; padding: 10px 0 12px; }
+.actions-cat button { width: 100%; margin: 0; height: 38px; font-size: 13px; padding: 0 6px; }
+.actions-cat .danger-txt { color: var(--rouge); }
