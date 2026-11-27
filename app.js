@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const VERSION_APP = '1.46.2';
+const VERSION_APP = '1.46.3';
 const VERSION_SCRIPT_ATTENDUE = '2.5.0';
 const LS = { config: 'budget.config', data: 'budget.data', outbox: 'budget.outbox', local: 'budget.local' };
 const CLES = {
@@ -717,8 +717,9 @@ function remplirSelect(sel, valeurs, vide, valeur) {
   if (valeur && valeurs.indexOf(valeur) === -1) sel.insertAdjacentHTML('beforeend', '<option>' + esc(valeur) + '</option>');
   sel.value = valeur || '';
 }
-function listeCategories() { return [...new Set(data.Categories.map(c => c.categorie))]; }
-function listeSousCategories(cat) { return data.Categories.filter(c => c.categorie === cat).map(c => c.sous_categorie); }
+const triFr = (x, y) => String(x).localeCompare(String(y), 'fr', { sensitivity: 'base' });
+function listeCategories() { return [...new Set(data.Categories.map(c => c.categorie))].sort(triFr); }
+function listeSousCategories(cat) { return data.Categories.filter(c => c.categorie === cat).map(c => c.sous_categorie).sort(triFr); }
 function listeComptes() { return data.Comptes.filter(c => c.actif !== false).sort((a, b) => (a.ordre || 0) - (b.ordre || 0)).map(c => c.nom); }
 
 function chargerSousCategories(valeur) {
